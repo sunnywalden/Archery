@@ -3,22 +3,22 @@ version: '3'
 services:
   redis:
     image: redis:5
-    container_name: redis
+    container_name: archery_redis
     restart: always
     command: redis-server --requirepass 123456
     expose:
       - "6379"
     ports:
-      - "6379:6379"
+      - "6399:6379"
 
   mysql:
     image: mysql:5.7
-    container_name: mysql
+    container_name: archery_mysql
     restart: always
     expose:
       - "3306"
     ports:
-      - "3306:3306"
+      - "3326:3306"
     volumes:
       - "./mysql/my.cnf:/etc/mysql/my.cnf"
       - "./mysql/datadir:/var/lib/mysql"
@@ -28,10 +28,10 @@ services:
 
   inception:
     image: hhyo/inception
-    container_name: inception
+    container_name: archery_inception
     restart: always
     ports:
-      - "6669:6669"
+      - "6689:6669"
     expose:
       - "6669"
     volumes:
@@ -41,10 +41,10 @@ services:
 
   goinception:
     image: hanchuanchuan/goinception
-    container_name: goinception
+    container_name: archery_goinception
     restart: always
     ports:
-      - "4000:4000"
+      - "4020:4000"
     expose:
       - "4000"
     volumes:
@@ -52,23 +52,23 @@ services:
     links:
       - mysql:mysql
 
-#  archery:
-##    image: hhyo/archery
-#    image: sunnywalden/archery-multi-tenant
-#    container_name: archery
-#    restart: "no"
-#    ports:
-#      - "9123:9123"
-#    volumes:
-#      - "./archery/settings.py:/opt/archery/archery/settings.py"
-#      - "./archery/soar.yaml:/etc/soar.yaml"
-#      - "./archery/docs.md:/opt/archery/docs/docs.md"
-#      - "./archery/downloads:/opt/archery/downloads"
-#    entrypoint: "dockerize -wait tcp://mysql:3306 -wait tcp://redis:6379 -timeout 60s /opt/archery/src/docker/startup.sh"
-#    environment:
-#      NGINX_PORT: 9123
-#    links:
-#      - mysql:mysql
-#      - redis:redis
-#      - inception:inception
-#      - goinception:goinception
+  archery:
+#    image: hhyo/archery
+    image: sunnywalden/archery-multi-tenant:v1.3.6.2Alpha
+    container_name: archery
+    restart: "no"
+    ports:
+      - "9123:9123"
+    volumes:
+      - "./archery/settings.py:/opt/archery/archery/settings.py"
+      - "./archery/soar.yaml:/etc/soar.yaml"
+      - "./archery/docs.md:/opt/archery/docs/docs.md"
+      - "./archery/downloads:/opt/archery/downloads"
+    entrypoint: "dockerize -wait tcp://mysql:3306 -wait tcp://redis:6379 -timeout 60s /opt/archery/src/docker/startup.sh"
+    environment:
+      NGINX_PORT: 9123
+    links:
+      - mysql:mysql
+      - redis:redis
+      - inception:inception
+      - goinception:goinception
