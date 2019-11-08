@@ -54,7 +54,11 @@ services:
 
   archery:
 #    image: hhyo/archery
+<<<<<<< HEAD
     image: sunnywalden/archery-multi-tenant:v1.3.6.2Alpha
+=======
+    image: sunnywalden/archery-multi-tenant
+>>>>>>> b27d4f454260a9889f15fc82e2f99b54d4c1f431
     container_name: archery
     restart: "no"
     ports:
