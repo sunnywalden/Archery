@@ -294,9 +294,7 @@ class MysqlEngine(EngineBase):
         # 原生执行
         if workflow.is_manual == 1:
             self.logger.info('SQL execute via mysql client directly!')
-            # 多线程执行SQL
-            # multi_thread(self.execute, db_names, (workflow.sqlworkflowcontent.sql_content, True))
-            # asyncio.run(self.async_execute(db_names, workflow.sqlworkflowcontent.sql_content, True))
+            # 异步执行
             asyncio.run(async_tasks(self.execute, db_names, workflow.sqlworkflowcontent.sql_content, True))
             return execute_res
         # goinception执行
@@ -309,10 +307,6 @@ class MysqlEngine(EngineBase):
             self.logger.info('SQL execute via inception!')
             inception_engine = InceptionEngine()
             return inception_engine.execute(workflow)
-
-    # async def async_execute(self, db_names, *args):
-    #     tasks = [asyncio.create_task(self.execute(db_name, *args)) for db_name in db_names]
-    #     await asyncio.gather(*tasks)
 
     async def execute(self, db_name=None, sql='', close_conn=False):
         """原生执行语句"""
