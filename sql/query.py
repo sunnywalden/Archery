@@ -14,6 +14,7 @@ from common.config import SysConfig
 from common.utils.extend_json_encoder import ExtendJSONEncoder, ExtendJSONEncoderFTime
 from common.utils.timer import FuncTimer
 from sql.query_privileges import query_priv_check
+from sql.utils.resource_group import user_instances
 from sql.utils.tasks import add_kill_conn_schedule, del_schedule
 from .models import QueryLog, Instance
 from sql.engines import get_engine
@@ -37,10 +38,10 @@ def query(request):
 
     result = {'status': 0, 'msg': 'ok', 'data': {}}
     try:
-        instance = Instance.objects.get(instance_name=instance_name)
+        instance = user_instances(request.user).get(instance_name=instance_name)
     except Instance.DoesNotExist:
         result['status'] = 1
-        result['msg'] = '实例不存在'
+        result['msg'] = '你所在组未关联该实例'
         return HttpResponse(json.dumps(result), content_type='application/json')
 
     # 服务器端参数验证
@@ -163,7 +164,7 @@ def query(request):
             try:
                 query_log.save()
             except OperationalError:
-                close()
+                query_engine.close()
                 query_log.save()
     except Exception as e:
         logger.error(f'查询异常报错，查询语句：{sql_content}\n，错误信息：{traceback.format_exc()}')

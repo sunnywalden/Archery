@@ -1,10 +1,9 @@
 # -*- coding: UTF-8 -*-
+
+import asyncio
 import datetime
-import logging
-from logging.handlers import RotatingFileHandler
 import traceback
-import threading
-import os
+import re
 
 import simplejson as json
 from django.contrib.auth.decorators import permission_required
@@ -15,24 +14,21 @@ from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import render, get_object_or_404
 from django.urls import reverse
 from django.utils import timezone
-import asyncio
+from django_q.tasks import async_task
 
-from common.utils.get_logger import get_logger
 from common.config import SysConfig
 from common.utils.const import Const, WorkflowDict
 from common.utils.extend_json_encoder import ExtendJSONEncoder
-from sql.notify import notify_for_audit
-from sql.models import ResourceGroup, Users
-from sql.utils.resource_group import user_groups, user_instances
-from sql.utils.tasks import add_sql_schedule, del_schedule
-from sql.utils.sql_review import can_timingtask, can_cancel, can_execute, on_correct_time_period
-from sql.utils.workflow_audit import Audit
-from sql.utils.async_tasks import async_tasks
-from sql.utils.multi_thread import multi_thread
-from .models import SqlWorkflow, SqlWorkflowContent, Instance
-from django_q.tasks import async_task
-
+from common.utils.get_logger import get_logger
 from sql.engines import get_engine
+from sql.models import ResourceGroup
+from sql.notify import notify_for_audit
+from sql.utils.async_tasks import async_tasks
+from sql.utils.resource_group import user_groups, user_instances
+from sql.utils.sql_review import can_timingtask, can_cancel, can_execute, on_correct_time_period
+from sql.utils.tasks import add_sql_schedule, del_schedule
+from sql.utils.workflow_audit import Audit
+from .models import SqlWorkflow, SqlWorkflowContent, Instance
 
 logger = get_logger()
 
@@ -117,7 +113,7 @@ async def sql_check(db_name, instance, sql_content):
     except Exception as e:
         result['status'] = 1
         result['msg'] = str(e)
-        logger.error('Sql cehck error {0}'.format(e))
+        logger.error('Sql check error {0}'.format(e))
         return HttpResponse(json.dumps(result), content_type='application/json')
     else:
         logger.debug('Debug sql check result for {0}: {1}'.format(db_name, check_result.to_dict()))
@@ -148,10 +144,7 @@ def check(request):
         all_check_res['msg'] = '页面提交参数可能为空'
         return HttpResponse(json.dumps(all_check_res), content_type='application/json')
 
-    # 多线程处理多个租户
-    # multi_thread(sql_check, db_names, (instance, sql_content))
     # 异步执行
-    # asyncio.run(async_check(db_names, instance, sql_content))
     asyncio.run(async_tasks(sql_check, db_names, instance, sql_content))
 
     return HttpResponse(json.dumps(all_check_res), content_type='application/json')
@@ -199,7 +192,7 @@ def workflow_check(db_name, instance, sql_content):
     return check_result, workflow_status
 
 
-def sql_submit(db_names, request, instance, sql_content, workflow_title, group_id, group_name, list_cc_addr,
+def sql_submit(db_names, request, instance, sql_content, workflow_title, group_id, group_name, cc_users,
                run_date_start, run_date_end):
     """提交SQL工单"""
 
@@ -225,12 +218,12 @@ def sql_submit(db_names, request, instance, sql_content, workflow_title, group_i
 
     # 获取对象的值
     check_result = {k: v.to_dict() for k, v in check_result.items()}
-    print('SQL check result {}'.format(check_result))
+    logger.debug('SQL check result {}'.format(check_result))
 
     # 调用工作流生成工单
     # 使用事务保持数据一致性
     try:
-        print('Start running sql for tenant {}'.format(db_names))
+        logger.debug('Start running sql for tenant {}'.format(db_names))
         with transaction.atomic():
             # 存进数据库里
             sql_workflow = SqlWorkflow.objects.create(
@@ -252,7 +245,6 @@ def sql_submit(db_names, request, instance, sql_content, workflow_title, group_i
             )
             SqlWorkflowContent.objects.create(workflow=sql_workflow,
                                               sql_content=sql_content,
-                                              # review_content=check_result.json(),
                                               review_content=json.dumps(check_result),
                                               execute_result=''
                                               )
@@ -265,14 +257,13 @@ def sql_submit(db_names, request, instance, sql_content, workflow_title, group_i
         logger.error(f"提交工单报错，错误信息：{traceback.format_exc()}")
         context = {'errMsg': msg}
         return context
-    # else:
-    finally:
+    else:
         # 自动审核通过才进行消息通知
         if workflow_status == 'workflow_manreviewing':
             # 获取审核信息
             audit_id = Audit.detail_by_workflow_id(workflow_id=workflow_id,
                                                    workflow_type=WorkflowDict.workflow_type['sqlreview']).audit_id
-            async_task(notify_for_audit, audit_id=audit_id, email_cc=list_cc_addr, timeout=60)
+            async_task(notify_for_audit, audit_id=audit_id, cc_users=cc_users, timeout=60)
 
         # 结果写入全局变量
         return workflow_id
@@ -290,8 +281,7 @@ def submit(request):
     instance = Instance.objects.get(instance_name=instance_name)
     db_names = request.POST.get('db_names', default='')
     is_backup = True if request.POST.get('is_backup') == 'True' else False
-    notify_users = request.POST.getlist('notify_users')
-    list_cc_addr = [email['email'] for email in Users.objects.filter(username__in=notify_users).values('email')]
+    cc_users = request.POST.getlist('cc_users')
     run_date_start = request.POST.get('run_date_start')
     run_date_end = request.POST.get('run_date_end')
 
@@ -311,8 +301,11 @@ def submit(request):
         context = {'errMsg': '你所在组未关联该实例！'}
         return render(request, 'error.html', context)
 
+    # 替换sql语句中双引号为单引号，规避json转换异常问题
+    sql_content = re.sub('"(\w.+)"', "'\\1'", sql_content)
+
     workflow_id = sql_submit(db_names, request, instance, sql_content, workflow_title, group_id,
-                             group_name, list_cc_addr, run_date_start, run_date_end)
+                             group_name, cc_users, run_date_start, run_date_end)
 
     if not isinstance(workflow_id, int):
         logger.error('Got error while audit workflow {}'.format(workflow_id))

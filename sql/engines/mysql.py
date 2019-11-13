@@ -1,25 +1,21 @@
 # -*- coding: UTF-8 -*-
-import logging
-import traceback
-import MySQLdb
+import asyncio
 import re
-import os
+import traceback
+
 import sqlparse
 from MySQLdb.connections import numeric_part
-from DBUtils.PooledDB import PooledDB, SharedDBConnection
-import asyncio
 
-from sql.utils.multi_thread import multi_thread
-from sql.utils.async_tasks import async_tasks
-from sql.utils.sql_conn import setup_conn, shutdown_conn
-from sql.engines.goinception import GoInceptionEngine
-from sql.utils.sql_utils import get_syntax_type, remove_comments
-from . import EngineBase
-from .models import ResultSet, ReviewResult, ReviewSet
-from .inception import InceptionEngine
-from sql.utils.data_masking import data_masking
 from common.config import SysConfig
 from common.utils.get_logger import get_logger
+from sql.engines.goinception import GoInceptionEngine
+from sql.utils.async_tasks import async_tasks
+from sql.utils.data_masking import data_masking
+from sql.utils.sql_conn import setup_conn, shutdown_conn
+from sql.utils.sql_utils import get_syntax_type, remove_comments
+from . import EngineBase
+from .inception import InceptionEngine
+from .models import ResultSet, ReviewResult, ReviewSet
 
 
 class MysqlEngine(EngineBase):
@@ -29,20 +25,17 @@ class MysqlEngine(EngineBase):
 
     def get_connection(self, db_name=None):
         if self.pool: return self.pool
-
         if db_name:
             self.pool = setup_conn(self.host, self.port, user=self.user, password=self.password, database=db_name, charset='utf8mb4')
         else:
             self.pool = setup_conn(self.host, self.port, user=self.user, password=self.password,
                                    charset='utf8mb4')
-
-        # self.conn = self.pool.connection()
-        # self.thread_id = self.conn.thread_id()
         return self.pool
 
     def close(self, pool=None):
         if self.pool:
             self.pool.close()
+
 
     @property
     def name(self):
@@ -135,7 +128,7 @@ class MysqlEngine(EngineBase):
             result_set.column_list = [i[0] for i in fields] if fields else []
             result_set.rows = rows
             result_set.affected_rows = effect_row
-        except Exception as e:
+        except OperationalError as e:
             self.logger.error(f"MySQL语句执行报错，语句：{sql}，错误信息{traceback.format_exc()}")
             result_set.error = str(e)
         finally:
@@ -301,9 +294,7 @@ class MysqlEngine(EngineBase):
         # 原生执行
         if workflow.is_manual == 1:
             self.logger.info('SQL execute via mysql client directly!')
-            # 多线程执行SQL
-            # multi_thread(self.execute, db_names, (workflow.sqlworkflowcontent.sql_content, True))
-            # asyncio.run(self.async_execute(db_names, workflow.sqlworkflowcontent.sql_content, True))
+            # 异步执行
             asyncio.run(async_tasks(self.execute, db_names, workflow.sqlworkflowcontent.sql_content, True))
             return execute_res
         # goinception执行
@@ -316,10 +307,6 @@ class MysqlEngine(EngineBase):
             self.logger.info('SQL execute via inception!')
             inception_engine = InceptionEngine()
             return inception_engine.execute(workflow)
-
-    # async def async_execute(self, db_names, *args):
-    #     tasks = [asyncio.create_task(self.execute(db_name, *args)) for db_name in db_names]
-    #     await asyncio.gather(*tasks)
 
     async def execute(self, db_name=None, sql='', close_conn=False):
         """原生执行语句"""
