@@ -1,4 +1,4 @@
-FROM sunnywalden/archery:base
+FROM sunnywalden/archery-multi-tenant:base
 
 WORKDIR /opt/archery
 
