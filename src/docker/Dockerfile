@@ -2,7 +2,7 @@ FROM sunnywalden/archery:base
 
 WORKDIR /opt/archery
 
-COPY ../.. /opt/archery
+COPY . /opt/archery
 
 #archery
 RUN cd /opt \
