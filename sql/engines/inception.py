@@ -261,14 +261,18 @@ class InceptionEngine(EngineBase):
         # 解析json对象
         if isinstance(workflow.sqlworkflowcontent.execute_result, (str)):
             execute_result = workflow.sqlworkflowcontent.execute_result
+            execute_result = execute_result.replace('\\n\\t', ' ')
             execute_result = execute_result.replace('\\\\n', ',')
-            execute_result = execute_result.replace('\\', '')
+            execute_result = execute_result.replace('\\\\t', ' ')
+            execute_result = execute_result.replace('\\n', ' ')
+            execute_result = execute_result.replace('\\t', ' ')
+            execute_result = execute_result.replace('\\', ' ')
             try:
-                list_execute_result = json.loads(execute_result)
+                list_execute_result = json.loads(execute_result.encode('utf-8'))
             except Exception as e:
                 logging.error("Transation execute result to python object failed {0}".format(e))
                 try:
-                    list_execute_result = eval(execute_result)
+                    list_execute_result = eval(execute_result.encode('utf-8'))
                 except Exception as e1:
                     list_execute_result = []
 

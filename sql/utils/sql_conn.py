@@ -6,12 +6,14 @@ import MySQLdb
 from DBUtils.PooledDB import PooledDB, SharedDBConnection
 
 
-def setup_conn(host, port, creator=MySQLdb, **args):
+def setup_conn(host, port, creator=MySQLdb, charset='utf8', **args):
     """创建数据库连接池"""
     pool = PooledDB(
             creator=creator,
             host=host,
             port=int(port),
+            charset=charset,
+            use_unicode=True,
             **args
         )
 

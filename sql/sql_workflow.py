@@ -3,6 +3,7 @@
 import asyncio
 import datetime
 import traceback
+import re
 
 import simplejson as json
 from django.contrib.auth.decorators import permission_required
@@ -299,6 +300,9 @@ def submit(request):
     except instance.DoesNotExist:
         context = {'errMsg': '你所在组未关联该实例！'}
         return render(request, 'error.html', context)
+
+    # 替换sql语句中双引号为单引号，规避json转换异常问题
+    sql_content = re.sub('"(\w.+)"', "'\\1'", sql_content)
 
     workflow_id = sql_submit(db_names, request, instance, sql_content, workflow_title, group_id,
                              group_name, cc_users, run_date_start, run_date_end)

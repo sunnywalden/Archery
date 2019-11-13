@@ -128,7 +128,7 @@ class MysqlEngine(EngineBase):
             result_set.column_list = [i[0] for i in fields] if fields else []
             result_set.rows = rows
             result_set.affected_rows = effect_row
-        except Exception as e:
+        except OperationalError as e:
             self.logger.error(f"MySQL语句执行报错，语句：{sql}，错误信息{traceback.format_exc()}")
             result_set.error = str(e)
         finally:

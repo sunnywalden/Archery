@@ -166,7 +166,7 @@ class GoInceptionEngine(EngineBase):
             return result_set
         cursor = conn.cursor()
         try:
-            effect_row = cursor.execute(sql)
+            effect_row = cursor.execute(sql.encode('utf-8'))
             if int(limit_num) > 0:
                 rows = cursor.fetchmany(size=int(limit_num))
             else:
