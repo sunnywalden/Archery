@@ -1,8 +1,8 @@
-FROM sunnywalden/archery:base
+FROM sunnywalden/archery-multi-tenant:base
 
 WORKDIR /opt/archery
 
-COPY ../.. /opt/archery
+COPY . /opt/archery
 
 #archery
 RUN cd /opt \
