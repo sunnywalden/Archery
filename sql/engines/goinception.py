@@ -165,7 +165,7 @@ class GoInceptionEngine(EngineBase):
             result_set.error = str(e)
             return result_set
         cursor = conn.cursor()
-        sql = sql.replace("'", '"')
+        # sql = sql.replace("'", '"')
         sql = sql.replace('\\', '')
         try:
             effect_row = cursor.execute(sql.encode('utf-8'))
