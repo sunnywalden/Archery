@@ -87,7 +87,9 @@ class InceptionEngine(EngineBase):
                                port=backup_port,
                                user=backup_user,
                                passwd=backup_password,
-                               charset='utf8mb4')
+                               charset='utf8mb4',
+                               autocommit=True
+                               )
 
     def execute_check(self, db_name=None, instance=None,  sql=''):
         """inception check"""
@@ -243,9 +245,7 @@ class InceptionEngine(EngineBase):
         try:
             print_info = self.query(db_name=db_name, sql=sql).to_dict()[0]
         except IndexError:
-            print_info = {}
-            print_info['errlevel'] = 1
-            print_info['errmsg'] = '查询异常'
+            print_info = {'errlevel': 1, 'errmsg': '查询异常'}
         # 兼容语法错误时errlevel=0的场景
         if print_info['errlevel'] == 0 and print_info['errmsg'] == 'None':
             return json.loads(_repair_json_str(print_info['query_tree']))
@@ -303,10 +303,12 @@ class InceptionEngine(EngineBase):
             except Exception as e:
                 self.logger.error(f"获取回滚语句报错，异常信息{traceback.format_exc()}")
                 return []
-            finally:
+            else:
                 # 回滚语句写入列表
                 if backup_sql: list_backup_sql.append(backup_sql)
-
+        # 关闭连接
+        if conn:
+            conn.close()
         return list_backup_sql
 
     def get_variables(self, variables=None):

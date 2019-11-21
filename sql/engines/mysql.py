@@ -3,6 +3,7 @@ import asyncio
 import re
 import traceback
 
+import MySQLdb
 import sqlparse
 from MySQLdb.connections import numeric_part
 
@@ -35,7 +36,6 @@ class MysqlEngine(EngineBase):
     def close(self, pool=None):
         if self.pool:
             self.pool.close()
-
 
     @property
     def name(self):
@@ -108,14 +108,16 @@ class MysqlEngine(EngineBase):
         result = self.query(db_name=db_name, sql=sql)
         return result
 
-    def query(self, db_name='', sql='', limit_num=0, close_conn=False):
+    def query(self, db_name=None, sql='', limit_num=0, close_conn=True, **kwargs):
         """返回 ResultSet """
         result_set = ResultSet(full_sql=sql)
+        # cursorclass = kwargs.get('cursorclass') or MySQLdb.cursors.Cursor
         try:
             # 连接池获取连接
             pool = self.get_connection(db_name=db_name)
             conn = pool.connection()
             cursor = conn.cursor()
+            # cursor = conn.cursor(cursorclass)
             effect_row = cursor.execute(sql)
             if int(limit_num) > 0:
                 rows = cursor.fetchmany(size=int(limit_num))
@@ -128,7 +130,7 @@ class MysqlEngine(EngineBase):
             result_set.column_list = [i[0] for i in fields] if fields else []
             result_set.rows = rows
             result_set.affected_rows = effect_row
-        except OperationalError as e:
+        except MySQLdb.OperationalError as e:
             self.logger.error(f"MySQL语句执行报错，语句：{sql}，错误信息{traceback.format_exc()}")
             result_set.error = str(e)
         finally:
@@ -136,7 +138,7 @@ class MysqlEngine(EngineBase):
                 self.close()
         return result_set
 
-    def query_check(self, db_name='', sql=''):
+    def query_check(self, db_name=None, sql=''):
         # 查询语句的检查、注释去除、切分
         result = {'msg': '', 'bad_query': False, 'filtered_sql': sql, 'has_star': False}
         # 删除注释语句，进行语法判断，执行第一条有效sql
@@ -177,7 +179,7 @@ class MysqlEngine(EngineBase):
             sql = f'{sql};'
         return sql
 
-    def query_masking(self, db_name='', sql='', resultset=None):
+    def query_masking(self, db_name=None, sql='', resultset=None):
         """传入 sql语句, db名, 结果集,
         返回一个脱敏后的结果集"""
         # 仅对select语句脱敏
@@ -187,7 +189,7 @@ class MysqlEngine(EngineBase):
             mask_result = resultset
         return mask_result
 
-    def execute_check(self, db_name='', sql=''):
+    def execute_check(self, db_name=None, sql=''):
         """上线单执行前的检查, 返回Review set"""
         config = SysConfig()
         # 进行Inception检查，获取检测结果

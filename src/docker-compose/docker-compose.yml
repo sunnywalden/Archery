@@ -53,8 +53,8 @@ services:
       - mysql:mysql
 
   archery:
-#    image: hhyo/archery:1.7.1
     image: sunnywalden/archery-multi-tenant:1.7.2
+#    image: hhyo/archery:1.7.2
     container_name: archery
     restart: "no"
     ports:
