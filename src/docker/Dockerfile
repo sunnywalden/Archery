@@ -1,8 +1,8 @@
-FROM sunnywalden/archery-base:v1.0
+FROM hhyo/archery-base:v1.0
 
 WORKDIR /opt/archery
 
-COPY . /opt/archery
+COPY . /opt/archery/
 
 #archery
 RUN cd /opt \

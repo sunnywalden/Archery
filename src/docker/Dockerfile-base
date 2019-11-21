@@ -1,16 +1,16 @@
 FROM docker.io/centos:7
 
-ENV LANG en_US.UTF-8
-ENV LC_ALL en_US.UTF-8
-
-ENV DOCKERIZE_VERSION v0.6.1
 ENV PYTHON_VERSION 3.7.5
+ENV DOCKERIZE_VERSION v0.6.1
 ENV SOAR_VERSION 0.11.0
+
+ENV LANG en_US.UTF-8
+ENV LC_ALL zh_CN.utf8
 
 WORKDIR /opt
 
 #python
-RUN yum -y install wget gcc make zlib-devel openssl openssl-devel ncurses-devel libffi-devel \
+RUN yum -y install wget gcc make zlib-devel openssl openssl-devel ncurses-devel openldap-devel gettext nginx libffi-devel \
     && cd /opt \
     && wget "https://www.python.org/ftp/python/$PYTHON_VERSION/Python-$PYTHON_VERSION.tar.xz" \
     && tar -xvJf Python-$PYTHON_VERSION.tar.xz \
@@ -39,7 +39,7 @@ RUN yum -y install wget gcc make zlib-devel openssl openssl-devel ncurses-devel 
     && yum -y install https://repo.percona.com/yum/percona-release-latest.noarch.rpm \
     && yum -y install Percona-Server-devel-56 Percona-Server-shared-56  Percona-Server-client-56 \
     && cd /opt \
-    && git clone https://github.com/hhyo/SQLAdvisor.git \
+    && git clone https://github.com/hhyo/SQLAdvisor.git --depth 3 \
     && cd /opt/SQLAdvisor/ \
     && cmake -DBUILD_CONFIG=mysql_release -DCMAKE_BUILD_TYPE=debug -DCMAKE_INSTALL_PREFIX=/usr/local/sqlparser ./ \
     && make && make install \
@@ -56,6 +56,9 @@ RUN yum -y install wget gcc make zlib-devel openssl openssl-devel ncurses-devel 
     && pip install schema-sync mysql-python \
 #soar
     && cd /opt \
+    && pip install schema-sync mysql-python \
+#soar
+    && cd /opt \
     && wget https://github.com/XiaoMi/soar/releases/download/$SOAR_VERSION/soar.linux-amd64 -O soar \
     && chmod a+x soar \
 #binlog2sql
@@ -69,5 +72,4 @@ RUN yum -y install wget gcc make zlib-devel openssl openssl-devel ncurses-devel 
     && ACCEPT_EULA=Y yum -y install msodbcsql17 \
     && yum -y install unixODBC-devel \
 #oracle instantclient
-    && yum -y install http://yum.oracle.com/repo/OracleLinux/OL7/oracle/instantclient/x86_64/getPackage/oracle-instantclient19.3-basiclite-19.3.0.0.0-1.x86_64.rpm \
-    && yum -y install openldap-devel gettext nginx
+    && yum -y install http://yum.oracle.com/repo/OracleLinux/OL7/oracle/instantclient/x86_64/getPackage/oracle-instantclient19.3-basiclite-19.3.0.0.0-1.x86_64.rpm
