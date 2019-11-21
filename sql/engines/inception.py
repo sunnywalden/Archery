@@ -1,22 +1,20 @@
 # -*- coding: UTF-8 -*-
+import asyncio
 import logging
 import re
 import traceback
+
 import MySQLdb
 import simplejson as json
 import sqlparse
-import os
-import asyncio
-from DBUtils.PooledDB import PooledDB
 
 from common.config import SysConfig
+from common.utils.get_logger import get_logger
+from sql.utils.async_tasks import async_tasks
 from sql.utils.sql_conn import setup_conn, shutdown_conn
 from sql.utils.sql_utils import get_syntax_type
-from sql.utils.multi_thread import multi_thread
-from sql.utils.async_tasks import async_tasks
 from . import EngineBase
 from .models import ResultSet, ReviewSet, ReviewResult
-from common.utils.get_logger import get_logger
 
 
 def get_rollback_sql(cur, row):
@@ -117,7 +115,7 @@ class InceptionEngine(EngineBase):
 
         # inception 校验
         check_result.rows = []
-        inception_sql = f"""/*--user={instance.user};--password={instance.raw_password};--host={instance.host};
+        inception_sql = f"""/*--user={instance.user};--password={instance.password};--host={instance.host};
                             --port={instance.port};--enable-check=1;*/
                             inception_magic_start;
                             use `{db_name}`;
@@ -150,10 +148,7 @@ class InceptionEngine(EngineBase):
         global execute_res
         execute_res = {}
 
-        # 多线程执行sql
-        # multi_thread(self.execute_sql, db_names, (instance, workflow))
         # 异步执行
-        # asyncio.run(self.async_execute(db_names, instance, workflow))
         asyncio.run(async_tasks(self.execute_sql, db_names, instance, workflow))
 
         return json.loads(json.dumps(execute_res))
@@ -166,7 +161,7 @@ class InceptionEngine(EngineBase):
         else:
             str_backup = "--disable-remote-backup"
         # 根据inception的要求，执行之前最好先split一下
-        sql_split = f"""/*--user={instance.user};--password={instance.raw_password};--host={instance.host}; 
+        sql_split = f"""/*--user={instance.user};--password={instance.password};--host={instance.host}; 
                          --port={instance.port};--enable-ignore-warnings;--enable-split;*/
                          inception_magic_start;
                          use `{workflow.db_name}`;
@@ -177,7 +172,7 @@ class InceptionEngine(EngineBase):
         # 对于split好的结果，再次交给inception执行，保持长连接里执行.
         for splitRow in split_result.rows:
             sql_tmp = splitRow[1]
-            sql_execute = f"""/*--user={instance.user};--password={instance.raw_password};--host={instance.host};
+            sql_execute = f"""/*--user={instance.user};--password={instance.password};--host={instance.host};
                                 --port={instance.port};--enable-execute;--enable-ignore-warnings;{str_backup};*/
                                 inception_magic_start;
                                 {sql_tmp}
@@ -232,7 +227,6 @@ class InceptionEngine(EngineBase):
         conn.close()
         if close_conn:
             # 关闭改租户连接
-            # self.close()
             shutdown_conn(pool=self.pool)
         return result_set
 
@@ -240,13 +234,18 @@ class InceptionEngine(EngineBase):
         """
         将sql交给inception打印语法树。
         """
-        sql = f"""/*--user={instance.user};--password={instance.raw_password};--host={instance.host};
+        sql = f"""/*--user={instance.user};--password={instance.password};--host={instance.host};
                           --port={instance.port};--enable-query-print;*/
                           inception_magic_start;\
                           use `{db_name}`;
                           {sql}
                           inception_magic_commit;"""
-        print_info = self.query(db_name=db_name, sql=sql).to_dict()[0]
+        try:
+            print_info = self.query(db_name=db_name, sql=sql).to_dict()[0]
+        except IndexError:
+            print_info = {}
+            print_info['errlevel'] = 1
+            print_info['errmsg'] = '查询异常'
         # 兼容语法错误时errlevel=0的场景
         if print_info['errlevel'] == 0 and print_info['errmsg'] == 'None':
             return json.loads(_repair_json_str(print_info['query_tree']))
@@ -262,14 +261,18 @@ class InceptionEngine(EngineBase):
         # 解析json对象
         if isinstance(workflow.sqlworkflowcontent.execute_result, (str)):
             execute_result = workflow.sqlworkflowcontent.execute_result
+            execute_result = execute_result.replace('\\n\\t', ' ')
             execute_result = execute_result.replace('\\\\n', ',')
-            execute_result = execute_result.replace('\\', '')
+            execute_result = execute_result.replace('\\\\t', ' ')
+            execute_result = execute_result.replace('\\n', ' ')
+            execute_result = execute_result.replace('\\t', ' ')
+            execute_result = execute_result.replace('\\', ' ')
             try:
-                list_execute_result = json.loads(execute_result)
+                list_execute_result = json.loads(execute_result.encode('utf-8'))
             except Exception as e:
                 logging.error("Transation execute result to python object failed {0}".format(e))
                 try:
-                    list_execute_result = eval(execute_result)
+                    list_execute_result = eval(execute_result.encode('utf-8'))
                 except Exception as e1:
                     list_execute_result = []
 

@@ -1,14 +1,14 @@
 # -*- coding: UTF-8 -*-
+import asyncio
 import os
-import time
-import threading
 import re
+import time
 
 import simplejson as json
 from django.conf import settings
 from django.contrib.auth.decorators import permission_required
 from django.http import HttpResponse
-import asyncio
+from django.views.decorators.cache import cache_page
 
 from common.config import SysConfig
 from common.utils.extend_json_encoder import ExtendJSONEncoder
@@ -16,7 +16,6 @@ from common.utils.get_logger import get_logger
 from sql.engines import get_engine
 from sql.plugins.schemasync import SchemaSync
 from sql.utils.async_tasks import async_tasks
-from sql.utils.multi_thread import multi_thread
 from .models import Instance, ParamTemplate, ParamHistory
 
 logger = get_logger()
@@ -206,18 +205,19 @@ def schemasync(request):
     # 准备参数
     tag = int(time.time())
     output_directory = os.path.join(settings.BASE_DIR, 'downloads/schemasync/')
+    os.makedirs(output_directory, exist_ok=True)
     args = {
         "sync-auto-inc": sync_auto_inc,
         "sync-comments": sync_comments,
         "tag": tag,
         "output-directory": output_directory,
         "source": r"mysql://{user}:'{pwd}'@{host}:{port}/{database}".format(user=instance_info.user,
-                                                                            pwd=instance_info.raw_password,
+                                                                            pwd=instance_info.password,
                                                                             host=instance_info.host,
                                                                             port=instance_info.port,
                                                                             database=db_name),
         "target": r"mysql://{user}:'{pwd}'@{host}:{port}/{database}".format(user=target_instance_info.user,
-                                                                            pwd=target_instance_info.raw_password,
+                                                                            pwd=target_instance_info.password,
                                                                             host=target_instance_info.host,
                                                                             port=target_instance_info.port,
                                                                             database=target_db_name)
@@ -267,7 +267,6 @@ async def sql_order(db_name, instance, schema_name, tb_name, resource_type, db_r
     try:
         query_engine = get_engine(instance=instance)
         if resource_type == 'database':
-            logger.debug('database!')
             resource = query_engine.get_all_databases()
             logger.debug('Debug all databases in instance {}'.format(resource.rows))
             # 正则筛选数据库
@@ -290,7 +289,7 @@ async def sql_order(db_name, instance, schema_name, tb_name, resource_type, db_r
         else:
             raise TypeError('不支持的资源类型或者参数不完整！')
     except Exception as msg:
-        logger.debug(msg)
+        logger.error("Error {0}".format(msg))
         result['status'] = 1
         result['msg'] = str(msg)
     else:
@@ -300,30 +299,31 @@ async def sql_order(db_name, instance, schema_name, tb_name, resource_type, db_r
             logger.error('Error catched in sql order for {0}: {1}'.format(db_name, result['data']))
         else:
             result['data'] = resource.rows
-            # logger.debug('Debug result in sql order {0}'.format(result['data']))
 
     # 结果写入全局变量
     global all_result
     all_result["data"] = result['data']
 
 
+@cache_page(60 * 5)
 def instance_resource(request):
     """
     获取实例内的资源信息，database、schema、table、column
     :param request:
     :return:
     """
-    instance_id = request.POST.get('instance_id', default='')
-    instance_name = request.POST.get('instance_name', default='')
-    db_regex = request.POST.get('db_regex', default='^.+$')
-    db_names = request.POST.get('db_names', default='')
-    schema_name = request.POST.get('schema_name', default='')
-    tb_name = request.POST.get('tb_name', default='')
-    resource_type = request.POST.get('resource_type', default='database')
+    instance_id = request.GET.get('instance_id', default='')
+    instance_name = request.GET.get('instance_name', default='')
+    db_regex = request.GET.get('db_regex', default='^.+$')
+    db_names = request.GET.get('db_names', default='')
+    schema_name = request.GET.get('schema_name', default='')
+    tb_name = request.GET.get('tb_name', default='')
+    resource_type = request.GET.get('resource_type', default='database')
 
     # 逗号分隔的多租户字符串转换为列表
     db_names = db_names.split(',') if db_names else []
 
+    logger.debug("Debug instance name {0}".format(instance_name))
     if instance_id:
         instance = Instance.objects.get(id=instance_id)
     else:
@@ -338,10 +338,7 @@ def instance_resource(request):
 
     # 多线程提交工单
     if db_names:
-        # 多线程执行
-        # multi_thread(sql_order, db_names, (instance, schema_name, tb_name, resource_type))
         # 异步执行
-        # asyncio.run(sql_order(db_names, instance, schema_name, tb_name, resource_type))
         asyncio.run(async_tasks(sql_order, db_names, instance, schema_name, tb_name, resource_type))
     else:
         logger.debug(resource_type)

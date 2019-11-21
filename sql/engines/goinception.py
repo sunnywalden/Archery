@@ -48,7 +48,7 @@ class GoInceptionEngine(EngineBase):
         self.logger.debug('Debug before doing execute check:{0}'.format(check_result.to_dict()))
         # inception 校验
         check_result.rows = []
-        inception_sql = f"""/*--user={instance.user};--password={instance.raw_password};--host={instance.host};--port={instance.port};--check=1;*/
+        inception_sql = f"""/*--user={instance.user};--password={instance.password};--host={instance.host};--port={instance.port};--check=1;*/
                             inception_magic_start;
                             use `{db_name}`;
                             {sql.rstrip(';')};
@@ -85,10 +85,7 @@ class GoInceptionEngine(EngineBase):
         global execute_res
         execute_res = {}
 
-        # 多线程执行sql
-        # multi_thread(self.execute_sql, db_names, (instance, workflow))
         # 异步执行
-        # asyncio.run(self.async_execute(db_names, instance, workflow))
         asyncio.run(async_tasks(self.execute_sql, db_names, instance, workflow))
 
         self.logger.info("Debug execute result in goinception execute func {0}".format(execute_res))
@@ -109,7 +106,7 @@ class GoInceptionEngine(EngineBase):
         else:
             str_backup = "--backup=0"
         # 提交inception执行
-        sql_execute = f"""/*--user={instance.user};--password={instance.raw_password};--host={instance.host};--port={instance.port};--execute=1;--ignore-warnings=1;{str_backup};*/
+        sql_execute = f"""/*--user={instance.user};--password={instance.password};--host={instance.host};--port={instance.port};--execute=1;--ignore-warnings=1;{str_backup};*/
                             inception_magic_start;
                             use `{db_name}`;
                             {workflow.sqlworkflowcontent.sql_content.rstrip(';')};
@@ -171,7 +168,7 @@ class GoInceptionEngine(EngineBase):
         sql = sql.replace("'", '"')
         sql = sql.replace('\\', '')
         try:
-            effect_row = cursor.execute(sql)
+            effect_row = cursor.execute(sql.encode('utf-8'))
             if int(limit_num) > 0:
                 rows = cursor.fetchmany(size=int(limit_num))
             else:

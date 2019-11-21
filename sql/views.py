@@ -1,6 +1,7 @@
 # -*- coding: UTF-8 -*-
 import os
 import traceback
+from simplejson.errors import JSONDecodeError
 
 import simplejson as json
 from django.conf import settings
@@ -155,8 +156,9 @@ def detail(request, workflow_id):
     if rows:
         try:
             loaded_rows = json.loads(rows)
-        except Exception as e:
-            loaded_rows = eval(rows)
+        except JSONDecodeError:
+            logger.error("Json decode error {}".format(rows))
+            rows = []
         else:
             try:
                 for k, v in loaded_rows.items():
