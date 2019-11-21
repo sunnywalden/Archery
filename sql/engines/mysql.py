@@ -312,6 +312,8 @@ class MysqlEngine(EngineBase):
 
     async def execute(self, db_name=None, sql='', close_conn=False):
         """原生执行语句"""
+        # 替换sql语句中双引号为单引号，规避json转换异常问题
+        sql = re.sub('"(\w.+)"', "'\\1'", sql.strip())
         result = ResultSet(full_sql=sql)
 
         pool = self.get_connection(db_name=db_name)
