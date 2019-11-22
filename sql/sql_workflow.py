@@ -194,8 +194,8 @@ def workflow_check(db_name, instance, sql_content):
     return check_result, workflow_status
 
 
-def sql_submit(db_names, request, instance, sql_content, workflow_title, group_id, group_name, cc_users,
-               run_date_start, run_date_end):
+def sql_submit(db_names, request, db_regex, instance, sql_content, workflow_title,
+               group_id, group_name, cc_users,run_date_start, run_date_end):
     """提交SQL工单"""
 
     logger.debug('Debug db_names in sql_submit {0}'.format(db_names))
@@ -238,6 +238,7 @@ def sql_submit(db_names, request, instance, sql_content, workflow_title, group_i
                 status=workflow_status,
                 is_backup=is_backup,
                 instance=instance,
+                db_regex=db_regex,
                 db_names=','.join(db_names) if db_names else '',
                 is_manual=0,
                 syntax_type=syntax_type,
@@ -281,6 +282,7 @@ def submit(request):
     group_id = ResourceGroup.objects.get(group_name=group_name).group_id
     instance_name = request.POST.get('instance_name')
     instance = Instance.objects.get(instance_name=instance_name)
+    db_regex = request.POST.get('db_regex', default='^.+$')
     db_names = request.POST.get('db_names', default='')
     is_backup = True if request.POST.get('is_backup') == 'True' else False
     cc_users = request.POST.getlist('cc_users')
@@ -306,7 +308,7 @@ def submit(request):
     # 替换sql语句中双引号为单引号，规避json转换异常问题
     sql_content = re.sub('"(\w.+)"', "'\\1'", sql_content)
 
-    workflow_id = sql_submit(db_names, request, instance, sql_content, workflow_title, group_id,
+    workflow_id = sql_submit(db_names, request, db_regex, instance, sql_content, workflow_title, group_id,
                              group_name, cc_users, run_date_start, run_date_end)
 
     if not isinstance(workflow_id, int):

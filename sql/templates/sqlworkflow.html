@@ -158,6 +158,7 @@
                             offset: params.offset,
                             navStatus: $("#navStatus").val(),
                             instance_id: $("#instance_id").val(),
+                            db_regex: $("#db_regex").val(),
                             db_names: $("#db_names").val(),
                             group_id: $("#group_id").val(),
                             start_date: $("#start_date").val(),
@@ -222,6 +223,10 @@
                     title: '目标实例',
                     field: 'instance__instance_name'
                 }, {
+                    title: '数据库正则',
+                    field: 'db_regex'
+                },
+                    {
                     title: '数据库',
                     field: 'db_names'
                 }, {

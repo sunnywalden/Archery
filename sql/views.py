@@ -190,6 +190,7 @@ def rollback(request):
         return render(request, 'error.html', context)
 
     workflow_detail = SqlWorkflow.objects.get(id=workflow_id)
+    db_regex = workflow_detail.db_regex
     db_names = workflow_detail.db_names
 
     # 获取数据，存入目录
@@ -212,7 +213,9 @@ def rollback(request):
         rollback_workflow_name = f"【回滚工单】原工单Id:{workflow_id} ,{workflow.workflow_name}"
         context = {'list_backup_sql': list_backup_sql, 'workflow_detail': workflow,
                    'rollback_workflow_name': rollback_workflow_name,
-                   'db_names': db_names.split(',')}
+                   'db_regex': db_regex,
+                   'db_names': db_names.split(',')
+                   }
         return render(request, 'rollback.html', context)
 
 

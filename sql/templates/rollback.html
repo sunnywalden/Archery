@@ -117,7 +117,12 @@
                                 return s && s.trim();
                             }
                         );
-                        var editSqlContent = SqlContent[0].replace(/`\w+`./, '');
+                        var editSqlContent = SqlContent.join('\n');
+                        {#var SqlContentWithoutDb = SqlContent.map(function (sql) {#}
+                        {#    return sql.replace(/`\w+`./, '')#}
+                        {#\});#}
+                        {#var editSqlContentAll = new Set(SqlContentWithoutDb);#}
+                        {#var editSqlContent = Array.from(editSqlContentAll);#}
                     }
                     else {
                         var editSqlContent = allRollBackSql;
@@ -125,13 +130,18 @@
                     var editGroup = "{{ workflow_detail.group_name }}";
                     var editClustername = "{{ workflow_detail.instance.instance_name }}";
                     var editDbname = "{{ workflow_detail.db_names }}";
+                    var editRegex = "{{ workflow_detail.db_regex }}";
                     var editIsbackup = "{{ workflow_detail.is_backup }}";
+                    var db = editDbname.split(',')[0];
+                    console.log(db);
                     sessionStorage.removeItem('editWorkflowDetailId');
                     sessionStorage.setItem('editWorkflowNname', editWorkflowNname);
                     sessionStorage.setItem('editSqlContent', editSqlContent);
                     sessionStorage.setItem('editGroup', editGroup);
                     sessionStorage.setItem('editClustername', editClustername);
                     sessionStorage.setItem('editDbname', editDbname);
+                    sessionStorage.setItem('editDb', db);
+                    sessionStorage.setItem('editRegex', editRegex);
                     sessionStorage.setItem('editIsbackup', editIsbackup);
                 });
             }

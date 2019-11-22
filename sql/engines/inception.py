@@ -261,6 +261,7 @@ class InceptionEngine(EngineBase):
         # 解析json对象
         if isinstance(workflow.sqlworkflowcontent.execute_result, (str)):
             execute_result = workflow.sqlworkflowcontent.execute_result
+            # 删除换行符，避免json转行错误
             execute_result = execute_result.replace('\\n\\t', ' ')
             execute_result = execute_result.replace('\\\\n', ',')
             execute_result = execute_result.replace('\\\\t', ' ')
