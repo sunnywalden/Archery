@@ -1,4 +1,5 @@
-FROM hhyo/archery-base:1.0
+#FROM hhyo/archery-base:1.0
+FROM sunnywalden/archery-base:v1.0
 
 WORKDIR /opt/archery
 
