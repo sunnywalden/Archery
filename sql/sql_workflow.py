@@ -109,7 +109,8 @@ async def sql_check(db_name, instance, sql_content):
     # 交给engine进行检测
     check_engine = get_engine(instance=instance)
     # 替换sql语句中双引号为单引号，规避json转换异常问题
-    sql_content = re.sub('"(\w.+)"', "'\\1'", sql_content.strip())
+    sql_content = re.sub('"', "'", sql_content.strip())
+    # sql_content = re.sub('"(\w.+)"', "'\\1'", sql_content.strip())
     try:
         check_result = check_engine.execute_check(db_name=db_name, sql=sql_content)
     except Exception as e:

@@ -2,6 +2,7 @@
 import asyncio
 import re
 import traceback
+import json
 
 from common.config import SysConfig
 from common.utils.get_logger import get_logger
@@ -48,6 +49,7 @@ class GoInceptionEngine(EngineBase):
         self.logger.debug('Debug before doing execute check:{0}'.format(check_result.to_dict()))
         # inception 校验
         check_result.rows = []
+        self.logger.debug('Debug sql content {0} {1}'.format(type(sql), sql))
         inception_sql = f"""/*--user={instance.user};--password={instance.password};--host={instance.host};--port={instance.port};--check=1;*/
                             inception_magic_start;
                             use `{db_name}`;
@@ -165,8 +167,8 @@ class GoInceptionEngine(EngineBase):
             result_set.error = str(e)
             return result_set
         cursor = conn.cursor()
-        # sql = sql.replace("'", '"')
         sql = sql.replace('\\', '')
+        sql = sql.replace('\n', ' ')
         try:
             effect_row = cursor.execute(sql.encode('utf-8'))
             if int(limit_num) > 0:

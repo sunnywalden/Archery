@@ -193,6 +193,7 @@ class MysqlEngine(EngineBase):
         """上线单执行前的检查, 返回Review set"""
         config = SysConfig()
         # 进行Inception检查，获取检测结果
+        self.logger.debug('Debug sql in mysql check func {0}'.format(sql))
         if not config.get('inception'):
             self.logger.info("SQL check via goinception")
             self.logger.info("Debug db_name in mysql.execute_check {0}".format(db_name))

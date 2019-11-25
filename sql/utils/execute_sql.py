@@ -51,11 +51,14 @@ def execute_callback(task):
     execute_result = []
     result_error = []
 
+    error_level = 0
     for database, exe_results in task_res.items():
         logger.debug("Debug SQL execute task result for database {0}".format(database))
         logger.debug("Debug result {0}, {1}".format(type(exe_results), exe_results))
         for exe_result in exe_results:
             res_error = exe_result["errormessage"]
+            err_level = int(exe_result["errlevel"])
+            if err_level > error_level: error_level = err_level
             if res_error:
                 logger.error("Execute sql error:{0}".format(res_error))
                 result_error.append(res_error)
@@ -72,7 +75,7 @@ def execute_callback(task):
             stagestatus='异常终止',
             errormessage=task.result,
             sql=workflow.sqlworkflowcontent.sql_content)]
-    elif result_error:
+    elif result_error and error_level == 2:
         execute_result = task.result
         workflow.status = 'workflow_exception'
     else:
