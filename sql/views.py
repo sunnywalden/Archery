@@ -1,34 +1,29 @@
 # -*- coding: UTF-8 -*-
 import os
-import traceback
-from simplejson.errors import JSONDecodeError
 
 import simplejson as json
 from django.conf import settings
-
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.models import Group
+from django.http import HttpResponseRedirect, FileResponse
 from django.shortcuts import render, get_object_or_404
-from django.http import HttpResponseRedirect
 from django.urls import reverse
+from simplejson.errors import JSONDecodeError
 
+from archery import settings
 from common.config import SysConfig
-from sql.engines import get_engine
+from common.utils.const import Const, WorkflowDict
+from common.utils.get_logger import get_logger
 from common.utils.permission import superuser_required
-from sql.engines.models import ReviewResult, ReviewSet
+from sql.engines import get_engine
+from sql.engines.models import ReviewSet
+from sql.utils.resource_group import user_groups
+from sql.utils.sql_review import can_execute, can_timingtask, can_cancel
 from sql.utils.tasks import task_info
-
+from sql.utils.workflow_audit import Audit
 from .models import Users, SqlWorkflow, QueryPrivileges, ResourceGroup, \
     QueryPrivilegesApply, Config, SQL_WORKFLOW_CHOICES, InstanceTag, Instance, QueryLog
-from sql.utils.workflow_audit import Audit
-from sql.utils.sql_review import can_execute, can_timingtask, can_cancel
-from common.utils.const import Const, WorkflowDict
-from sql.utils.resource_group import user_groups
 
-import logging
-from common.utils.get_logger import get_logger
-
-# log_name = os.path.split(__file__)[-1]
 logger = get_logger()
 
 
@@ -179,12 +174,12 @@ def detail(request, workflow_id):
 
 def rollback(request):
     """展示回滚的SQL页面"""
-    workflow_id = request.GET['workflow_id']
+    workflow_id = request.GET.get('workflow_id')
+    download = request.GET.get('download')
     if workflow_id == '' or workflow_id is None:
         context = {'errMsg': 'workflow_id参数为空.'}
         return render(request, 'error.html', context)
-    workflow_id = int(workflow_id)
-    workflow = SqlWorkflow.objects.get(id=workflow_id)
+    workflow = SqlWorkflow.objects.get(id=int(workflow_id))
 
     query_engine = get_engine(instance=workflow.instance)
     try:
@@ -193,14 +188,32 @@ def rollback(request):
         logger.error(msg)
         context = {'errMsg': msg}
         return render(request, 'error.html', context)
+
     workflow_detail = SqlWorkflow.objects.get(id=workflow_id)
     db_names = workflow_detail.db_names
-    workflow_title = workflow_detail.workflow_name
-    rollback_workflow_name = "【回滚工单】原工单Id:%s ,%s" % (workflow_id, workflow_title)
-    context = {'list_backup_sql': list_backup_sql, 'workflow_detail': workflow_detail,
-               'rollback_workflow_name': rollback_workflow_name,
-               'db_names': db_names.split(',')}
-    return render(request, 'rollback.html', context)
+
+    # 获取数据，存入目录
+    path = os.path.join(settings.BASE_DIR, 'downloads/rollback')
+    os.makedirs(path, exist_ok=True)
+    file_name = f'{path}/rollback_{workflow_id}.sql'
+    with open(file_name, 'w') as f:
+        for sql in list_backup_sql:
+            f.write(f'/*{sql[0]}*/\n{sql[1]}\n')
+
+    # 回滚语句大于4M强制转换为下载，此时前端无法自动填充
+    if os.path.getsize(file_name) > 4194304 or download:
+        response = FileResponse(open(file_name, 'rb'))
+        response['Content-Type'] = 'application/octet-stream'
+        response['Content-Disposition'] = f'attachment;filename="rollback_{workflow_id}.sql"'
+        return response
+    # 小于4M的删除文件
+    else:
+        os.remove(file_name)
+        rollback_workflow_name = f"【回滚工单】原工单Id:{workflow_id} ,{workflow.workflow_name}"
+        context = {'list_backup_sql': list_backup_sql, 'workflow_detail': workflow,
+                   'rollback_workflow_name': rollback_workflow_name,
+                   'db_names': db_names.split(',')}
+        return render(request, 'rollback.html', context)
 
 
 @permission_required('sql.menu_sqlanalyze', raise_exception=True)

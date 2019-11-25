@@ -17,21 +17,21 @@ class GoInceptionEngine(EngineBase):
         super().__init__(instance=instance)
         self.logger = get_logger()
 
-    def get_connection(self, db_name=None):
+    def get_connection(self, db_name=None, **kwargs):
         if self.pool:
             return self.pool
         if hasattr(self, 'instance'):
             if db_name:
-                self.pool = setup_conn(self.host, self.port, user=self.user, password=self.password, database=db_name, charset=self.instance.charset or 'utf8mb4')
+                self.pool = setup_conn(self.host, self.port, user=self.user, password=self.password, database=db_name, charset=self.instance.charset or 'utf8mb4', **kwargs)
             else:
                 self.pool = setup_conn(self.host, self.port, user=self.user, password=self.password,
-                                       charset=self.instance.charset or 'utf8mb4')
+                                       charset=self.instance.charset or 'utf8mb4', **kwargs)
         else:
 
             archer_config = SysConfig()
             go_inception_host = archer_config.get('go_inception_host')
             go_inception_port = int(archer_config.get('go_inception_port', 4000))
-            self.pool = setup_conn(go_inception_host, go_inception_port)
+            self.pool = setup_conn(go_inception_host, go_inception_port, use_unicode=True)
 
         return self.pool
 
@@ -155,9 +155,9 @@ class GoInceptionEngine(EngineBase):
         self.logger.debug('Debug ResultSet before query in GoInception {0}'.format(result_set.to_dict()))
         # 从连接池获取数据库连接
         if db_name:
-            pool = self.get_connection(db_name=db_name)
+            pool = self.get_connection(db_name=db_name, use_unicode=True)
         else:
-            pool = self.get_connection()
+            pool = self.get_connection(use_unicode=True)
         try:
             conn = pool.connection()
         except Exception as e:
@@ -165,6 +165,8 @@ class GoInceptionEngine(EngineBase):
             result_set.error = str(e)
             return result_set
         cursor = conn.cursor()
+        # sql = sql.replace("'", '"')
+        sql = sql.replace('\\', '')
         try:
             effect_row = cursor.execute(sql.encode('utf-8'))
             if int(limit_num) > 0:
@@ -175,6 +177,7 @@ class GoInceptionEngine(EngineBase):
             cursor.close()
             conn.close()
             result_set.column_list = [i[0] for i in fields] if fields else []
+            self.logger.debug('Debug {}'.format(rows))
             result_set.rows = rows
             result_set.affected_rows = effect_row
         except Exception as e:

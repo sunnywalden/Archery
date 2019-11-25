@@ -3,7 +3,7 @@
 __author__ = 'sunnywalden@gmail.com'
 
 import MySQLdb
-from DBUtils.PooledDB import PooledDB, SharedDBConnection
+from DBUtils.PooledDB import PooledDB
 
 
 def setup_conn(host, port, creator=MySQLdb, charset='utf8', **args):
@@ -13,7 +13,6 @@ def setup_conn(host, port, creator=MySQLdb, charset='utf8', **args):
             host=host,
             port=int(port),
             charset=charset,
-            use_unicode=True,
             **args
         )
 

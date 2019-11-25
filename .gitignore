@@ -16,3 +16,4 @@ nohup.out
 src/docker-compose/mysql/datadir/
 !.gitkeep
 binlog2sql
+sonar-project.properties

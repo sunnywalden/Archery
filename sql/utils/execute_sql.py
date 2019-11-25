@@ -1,15 +1,14 @@
 # -*- coding: UTF-8 -*-
 
-import os
 import json
 
 from common.utils.const import WorkflowDict
+from common.utils.get_logger import get_logger
+from sql.engines import get_engine
 from sql.engines.models import ReviewResult, ReviewSet
 from sql.models import SqlWorkflow
 from sql.notify import notify_for_execute
 from sql.utils.workflow_audit import Audit
-from common.utils.get_logger import get_logger
-from sql.engines import get_engine
 
 logger = get_logger()
 
@@ -54,17 +53,12 @@ def execute_callback(task):
 
     for database, exe_results in task_res.items():
         logger.debug("Debug SQL execute task result for database {0}".format(database))
-        # result_error.append(execute_res["errormessage"])
-        # if res["errormessage"]:
         logger.debug("Debug result {0}, {1}".format(type(exe_results), exe_results))
         for exe_result in exe_results:
             res_error = exe_result["errormessage"]
             if res_error:
-            # logger.error("Execute sql error: {0}".format(res["errormessage"]))
                 logger.error("Execute sql error:{0}".format(res_error))
                 result_error.append(res_error)
-        # if res.warning:
-        #     logger.info("Debug res.warning {0}".format(res.warning))
 
         execute_result.extend(exe_results)
 
@@ -78,17 +72,11 @@ def execute_callback(task):
             stagestatus='异常终止',
             errormessage=task.result,
             sql=workflow.sqlworkflowcontent.sql_content)]
-    # elif result_warning or result_error:
     elif result_error:
         execute_result = task.result
         workflow.status = 'workflow_exception'
     else:
-        # execute_result = task.result.values()
-        # if isinstance(execute_result, (dict, tuple, list)):
-        #     execute_result = task.result.values()
-        # else:
-        #     execute_result = task.result
-        execute_result = json.dumps(execute_result)
+        # execute_result = json.dumps(execute_result)
         workflow.status = 'workflow_finish'
     # 保存执行结果
     logger.info("Final execute result save to mysql {0}".format(execute_result))
