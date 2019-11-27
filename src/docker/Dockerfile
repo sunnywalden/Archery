@@ -7,6 +7,7 @@ COPY . /opt/archery/
 
 #archery
 RUN cd /opt \
+    && yum -y install nginx \
     && source /opt/venv4archery/bin/activate \
     && cd /opt/archery \
     && pip3 install -r /opt/archery/requirements.txt \

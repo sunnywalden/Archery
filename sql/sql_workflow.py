@@ -130,7 +130,7 @@ async def sql_check(db_name, instance, sql_content):
 @permission_required('sql.sql_submit', raise_exception=True)
 def check(request):
     """SQL检测按钮, 此处没有产生工单"""
-    sql_content = request.POST.get('sql_content')
+    sql_content = request.POST.get('sql_content').strip()
     instance_name = request.POST.get('instance_name')
     instance = Instance.objects.get(instance_name=instance_name)
     db_names = request.POST.get('db_names', default='')
@@ -141,7 +141,7 @@ def check(request):
     all_check_res = {'status': 0, 'msg': 'ok', 'data': {"rows": [], "CheckWarningCount": 0, "CheckErrorCount": 0}}
 
     # 服务器端参数验证
-    if sql_content is None or instance_name is None or db_names is None:
+    if None in [sql_content, db_names, instance_name]:
         all_check_res['status'] = 1
         all_check_res['msg'] = '页面提交参数可能为空'
         return HttpResponse(json.dumps(all_check_res), content_type='application/json')
@@ -192,7 +192,7 @@ def workflow_check(db_name, instance, sql_content):
     return check_result, workflow_status
 
 
-def sql_submit(db_names, request, db_regex, instance, sql_content, workflow_title,
+def sql_submit(db_names, request, db_regex, instance, sql_content, workflow_title, demand_url,
                group_id, group_name, cc_users, run_date_start, run_date_end):
     """提交SQL工单"""
 
@@ -229,6 +229,7 @@ def sql_submit(db_names, request, db_regex, instance, sql_content, workflow_titl
             # 存进数据库里
             sql_workflow = SqlWorkflow.objects.create(
                 workflow_name=workflow_title,
+                demand_url=demand_url,
                 group_id=group_id,
                 group_name=group_name,
                 engineer=request.user.username,
@@ -276,6 +277,7 @@ def submit(request):
     """正式提交SQL, 此处生成工单"""
     sql_content = request.POST.get('sql_content').strip()
     workflow_title = request.POST.get('workflow_name')
+    demand_url = request.POST.get('demand_url')
     # 检查用户是否有权限涉及到资源组等， 比较复杂， 可以把检查权限改成一个独立的方法
     group_name = request.POST.get('group_name')
     group_id = ResourceGroup.objects.get(group_name=group_name).group_id
@@ -304,7 +306,7 @@ def submit(request):
         context = {'errMsg': '你所在组未关联该实例！'}
         return render(request, 'error.html', context)
 
-    workflow_id = sql_submit(db_names, request, db_regex, instance, sql_content, workflow_title, group_id,
+    workflow_id = sql_submit(db_names, request, db_regex, instance, sql_content, workflow_title, demand_url, group_id,
                              group_name, cc_users, run_date_start, run_date_end)
 
     if not isinstance(workflow_id, int):

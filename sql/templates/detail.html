@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-    <h4 style="display: inline;"><span>{{ workflow_detail.workflow_name }}</span></h4>
+    <h4 style="display: inline;"><a target="_blank" href="{{ workflow_detail.demand_url }}">{{ workflow_detail.workflow_name }}</a></h4>
     &nbsp;&nbsp;&nbsp;
     <!--只允许发起人提交其他实例-->
     {% if user.username == workflow_detail.engineer %}
@@ -401,6 +401,7 @@
     <script>
         var editWorkflowNname = "{{ workflow_detail.workflow_name }}";
         var editWorkflowDbs = "{{ workflow_detail.db_names }}";
+        var editDemandUrl = "{{ workflow_detail.demand_url }}";
         var editSqlContent = $("#editSqlContent").val();
         var editGroup = "{{ workflow_detail.group_name }}";
         var editClustername = "{{ workflow_detail.instance.instance_name }}";
@@ -410,6 +411,7 @@
         $("#btnEditSql").click(function () {
             sessionStorage.setItem('editWorkflowNname', editWorkflowNname);
             sessionStorage.setItem('editWorkflowDbs', editWorkflowDbs);
+            sessionStorage.setItem('editDemandUrl', editDemandUrl);
             sessionStorage.setItem('editSqlContent', editSqlContent);
             sessionStorage.setItem('editGroup', editGroup);
             sessionStorage.setItem('editClustername', editClustername);
@@ -420,6 +422,7 @@
             sessionStorage.removeItem('editWorkflowDetailId');
             sessionStorage.setItem('editWorkflowNname', editWorkflowNname);
             sessionStorage.setItem('editWorkflowDbs', editWorkflowDbs);
+            sessionStorage.setItem('editDemandUrl', editDemandUrl);
             sessionStorage.setItem('editSqlContent', editSqlContent);
             sessionStorage.setItem('editGroup', editGroup);
             sessionStorage.setItem('editClustername', editClustername);
@@ -429,6 +432,7 @@
         $("#btnSubmitOtherCluster").click(function () {
             sessionStorage.setItem('editWorkflowNname', editWorkflowNname);
             sessionStorage.setItem('editWorkflowDbs', editWorkflowDbs);
+            sessionStorage.setItem('editDemandUrl', editDemandUrl);
             sessionStorage.setItem('editSqlContent', editSqlContent);
             sessionStorage.setItem('editGroup', editGroup);
             sessionStorage.setItem('editIsbackup', editIsbackup);
