@@ -156,7 +156,10 @@ class InceptionEngine(EngineBase):
         return json.loads(json.dumps(execute_res))
 
     async def execute_sql(self, db_name, instance, workflow):
-        execute_result = ReviewSet(full_sql=workflow.sqlworkflowcontent.sql_content)
+        sql = workflow.sqlworkflowcontent.sql_content.replace('"', '\"')
+        # sql = sql.replace("'", "\'")
+        sql = sql.replace('\n', ' ')
+        execute_result = ReviewSet(full_sql=sql)
         global execute_res
         if workflow.is_backup:
             str_backup = "--enable-remote-backup"
@@ -260,13 +263,6 @@ class InceptionEngine(EngineBase):
         # 解析json对象
         if isinstance(workflow.sqlworkflowcontent.execute_result, (str)):
             execute_result = workflow.sqlworkflowcontent.execute_result
-            # 删除换行符，避免json转行错误
-            execute_result = execute_result.replace('\\n\\t', ' ')
-            execute_result = execute_result.replace('\\\\n', ',')
-            execute_result = execute_result.replace('\\\\t', ' ')
-            execute_result = execute_result.replace('\\n', ' ')
-            execute_result = execute_result.replace('\\t', ' ')
-            execute_result = execute_result.replace('\\', ' ')
             try:
                 list_execute_result = json.loads(execute_result.encode('utf-8'))
             except Exception as e:

@@ -118,7 +118,6 @@ class MysqlEngine(EngineBase):
             # 连接池获取连接
             pool = self.get_connection(db_name=db_name)
             conn = pool.connection()
-            # cursor = conn.cursor()
             cursor = conn.cursor(cursorclass)
             effect_row = cursor.execute(sql)
             if int(limit_num) > 0:
@@ -316,7 +315,10 @@ class MysqlEngine(EngineBase):
     async def execute(self, db_name=None, sql='', close_conn=False):
         """原生执行语句"""
         # 替换sql语句中双引号为单引号，规避json转换异常问题
-        sql = re.sub('"(\w.+)"', "'\\1'", sql.strip())
+        # sql = re.sub('"(\w.+)"', "'\\1'", sql.strip())
+        sql = sql.replace('\n', ' ')
+        sql = sql.replace('"', '\"')
+        # sql = sql.replace("'", "\'")
         result = ResultSet(full_sql=sql)
 
         pool = self.get_connection(db_name=db_name)

@@ -102,6 +102,8 @@ def detail(request, workflow_id):
     else:
         rows = workflow_detail.sqlworkflowcontent.review_content
 
+    logger.debug('Debug rows {}'.format(rows))
+
     # 自动审批不通过的不需要获取下列信息
     if workflow_detail.status != 'workflow_autoreviewwrong':
         # 获取当前审批和审批流程

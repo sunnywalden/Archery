@@ -79,14 +79,10 @@ def execute_callback(task):
         execute_result = task.result
         workflow.status = 'workflow_exception'
     else:
-        # execute_result = json.dumps(execute_result)
         workflow.status = 'workflow_finish'
     # 保存执行结果
     logger.info("Final execute result save to mysql {0}".format(execute_result))
     execute_result = json.dumps(execute_result)
-    execute_result = execute_result.replace('\\n\\t', ' ')
-    execute_result = execute_result.replace('\\n', ' ')
-    execute_result = execute_result.replace('\\', '').strip('"')
     workflow.sqlworkflowcontent.execute_result = execute_result
     workflow.sqlworkflowcontent.save()
     workflow.save()

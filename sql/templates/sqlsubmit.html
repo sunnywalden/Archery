@@ -744,6 +744,7 @@
 
             if (pathname === "/editsql/") {
                 $("#workflow_name").val(sessionStorage.getItem('editWorkflowNname'));
+                $("#demand_url").val(sessionStorage.getItem('editDemandUrl'));
                 $("#group_name").val(sessionStorage.getItem('editGroup'));
                 $("#db_regex").val(sessionStorage.getItem('editRegex'));
                 $("#db_names").val(sessionStorage.getItem('editDb').split(','));

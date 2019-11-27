@@ -104,7 +104,10 @@ class GoInceptionEngine(EngineBase):
         self.logger.info("Start execute sql for {0} via goInception.".format(db_name))
         self.logger.info("Start execute sql for {0} via goInception.".format(db_name))
 
-        execute_result = ReviewSet(full_sql=workflow.sqlworkflowcontent.sql_content)
+        sql = workflow.sqlworkflowcontent.sql_content
+        # 去掉换行
+        sql = sql.replace('\n', ' ')
+        execute_result = ReviewSet(full_sql=sql)
 
         global execute_res
 

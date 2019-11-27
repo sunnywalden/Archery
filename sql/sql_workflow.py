@@ -229,7 +229,7 @@ def sql_submit(db_names, request, db_regex, instance, sql_content, workflow_titl
             # 存进数据库里
             sql_workflow = SqlWorkflow.objects.create(
                 workflow_name=workflow_title,
-                demand_url=demand_url,
+                demand_url=demand_url or '无',
                 group_id=group_id,
                 group_name=group_name,
                 engineer=request.user.username,
