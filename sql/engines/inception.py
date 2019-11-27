@@ -190,7 +190,6 @@ class InceptionEngine(EngineBase):
                     stagestatus='异常终止',
                     errormessage=f'Inception Error: {one_line_execute_result.error}',
                     sql=sql_tmp)]
-                # return execute_result
 
             # 把结果转换为ReviewSet
             for r in one_line_execute_result.rows:

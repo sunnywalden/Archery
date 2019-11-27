@@ -23,7 +23,8 @@ class GoInceptionEngine(EngineBase):
             return self.pool
         if hasattr(self, 'instance'):
             if db_name:
-                self.pool = setup_conn(self.host, self.port, user=self.user, password=self.password, database=db_name, charset=self.instance.charset or 'utf8mb4', **kwargs)
+                self.pool = setup_conn(self.host, self.port, user=self.user, password=self.password, database=db_name,
+                                       charset=self.instance.charset or 'utf8mb4', **kwargs)
             else:
                 self.pool = setup_conn(self.host, self.port, user=self.user, password=self.password,
                                        charset=self.instance.charset or 'utf8mb4', **kwargs)
@@ -32,7 +33,11 @@ class GoInceptionEngine(EngineBase):
             archer_config = SysConfig()
             go_inception_host = archer_config.get('go_inception_host')
             go_inception_port = int(archer_config.get('go_inception_port', 4000))
-            self.pool = setup_conn(go_inception_host, go_inception_port, use_unicode=True)
+            self.pool = setup_conn(
+                go_inception_host,
+                go_inception_port,
+                charset='utf8mb4',
+                use_unicode=True)
 
         return self.pool
 
@@ -42,14 +47,14 @@ class GoInceptionEngine(EngineBase):
         if pool:
             shutdown_conn(pool=pool)
 
-    def execute_check(self, db_name='', instance=None,  sql=''):
+    def execute_check(self, db_name='', instance=None, sql=''):
         """inception check"""
         check_result = ReviewSet(full_sql=sql)
         self.logger.debug("Debug db_name in goinception.execute_check {0}".format(db_name))
         self.logger.debug('Debug before doing execute check:{0}'.format(check_result.to_dict()))
         # inception 校验
         check_result.rows = []
-        self.logger.debug('Debug sql content {0} {1}'.format(type(sql), sql))
+        self.logger.debug('Debug sql content {0}'.format(sql))
         inception_sql = f"""/*--user={instance.user};--password={instance.password};--host={instance.host};--port={instance.port};--check=1;*/
                             inception_magic_start;
                             use `{db_name}`;
@@ -148,10 +153,9 @@ class GoInceptionEngine(EngineBase):
 
         self.logger.info("Debug db_name in goinception.query: {0}".format(db_name))
         if db_name:
-            self.logger.info("Starting flash sql for {0} in goInception.".format(db_name))
-            self.logger.info("Starting flash sql for {0}".format(db_name))
-        else:
-            self.logger.info("Query database: {0}".format(sql))
+            self.logger.info("Starting query for {0} in goInception.".format(db_name))
+            self.logger.info("Starting query for {0}".format(db_name))
+        self.logger.debug("Query database: {0}".format(sql))
 
         result_set = ResultSet(full_sql=sql)
         self.logger.debug('Debug ResultSet before query in GoInception {0}'.format(result_set.to_dict()))
@@ -167,10 +171,9 @@ class GoInceptionEngine(EngineBase):
             result_set.error = str(e)
             return result_set
         cursor = conn.cursor()
-        sql = sql.replace('\\', '')
-        sql = sql.replace('\n', ' ')
+        self.logger.debug('Debug sql content {}'.format(sql))
         try:
-            effect_row = cursor.execute(sql.encode('utf-8'))
+            effect_row = cursor.execute(sql)
             if int(limit_num) > 0:
                 rows = cursor.fetchmany(size=int(limit_num))
             else:
@@ -186,10 +189,10 @@ class GoInceptionEngine(EngineBase):
             self.logger.error(f'goInception语句执行报错，语句：{sql}，错误信息{traceback.format_exc()}')
             result_set.error = str(e)
         finally:
-            self.logger.info("goInception execute sql for {0} finished!".format(db_name))
-            self.logger.info("Debug goInception execute result: {0}".format(result_set.to_dict()))
+            self.logger.info("goInception sql query for {0} finished!".format(db_name))
+            self.logger.info("Debug goInception query result: {0}".format(result_set.to_dict()))
         if close_conn:
-            shutdown_conn(pool=self.pool)
+            shutdown_conn(pool=pool)
         return result_set
 
     def get_variables(self, variables=None):

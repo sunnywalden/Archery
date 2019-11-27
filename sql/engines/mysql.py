@@ -34,8 +34,10 @@ class MysqlEngine(EngineBase):
         return self.pool
 
     def close(self, pool=None):
-        if self.pool:
-            self.pool.close()
+        if not pool:
+            pool = self.pool
+        if pool:
+            shutdown_conn(pool=pool)
 
     @property
     def name(self):
@@ -111,13 +113,13 @@ class MysqlEngine(EngineBase):
     def query(self, db_name=None, sql='', limit_num=0, close_conn=True, **kwargs):
         """返回 ResultSet """
         result_set = ResultSet(full_sql=sql)
-        # cursorclass = kwargs.get('cursorclass') or MySQLdb.cursors.Cursor
+        cursorclass = kwargs.get('cursorclass') or MySQLdb.cursors.Cursor
         try:
             # 连接池获取连接
             pool = self.get_connection(db_name=db_name)
             conn = pool.connection()
-            cursor = conn.cursor()
-            # cursor = conn.cursor(cursorclass)
+            # cursor = conn.cursor()
+            cursor = conn.cursor(cursorclass)
             effect_row = cursor.execute(sql)
             if int(limit_num) > 0:
                 rows = cursor.fetchmany(size=int(limit_num))

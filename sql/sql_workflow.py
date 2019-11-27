@@ -109,8 +109,7 @@ async def sql_check(db_name, instance, sql_content):
     # 交给engine进行检测
     check_engine = get_engine(instance=instance)
     # 替换sql语句中双引号为单引号，规避json转换异常问题
-    sql_content = re.sub('"', "'", sql_content.strip())
-    # sql_content = re.sub('"(\w.+)"', "'\\1'", sql_content.strip())
+    sql_content = sql_content.replace('"', '\"')
     try:
         check_result = check_engine.execute_check(db_name=db_name, sql=sql_content)
     except Exception as e:
@@ -184,10 +183,8 @@ def workflow_check(db_name, instance, sql_content):
     workflow_status = 'workflow_manreviewing'
     if check_result.warning_count > 0 and auto_review_wrong == '1':
         workflow_status = 'workflow_autoreviewwrong'
-    elif check_result.error_count > 0 and auto_review_wrong in ('', '1', '2'):
+    if check_result.error_count > 0 and auto_review_wrong in ('', '1', '2'):
         workflow_status = 'workflow_autoreviewwrong'
-    else:
-        pass
 
     logger.debug("Debug sql review result in workflow_check {}".format(check_result.to_dict()))
     print("Debug sql review result in workflow_check {}".format(check_result))
@@ -196,10 +193,11 @@ def workflow_check(db_name, instance, sql_content):
 
 
 def sql_submit(db_names, request, db_regex, instance, sql_content, workflow_title,
-               group_id, group_name, cc_users,run_date_start, run_date_end):
+               group_id, group_name, cc_users, run_date_start, run_date_end):
     """提交SQL工单"""
 
     logger.debug('Debug db_names in sql_submit {0}'.format(db_names))
+    logger.debug('Debug sql content {}'.format(sql_content))
     is_backup = check_backup(instance)
     check_result, workflow_status = {}, {}
     for db_name in db_names:
@@ -305,9 +303,6 @@ def submit(request):
     except instance.DoesNotExist:
         context = {'errMsg': '你所在组未关联该实例！'}
         return render(request, 'error.html', context)
-
-    # 替换sql语句中双引号为单引号，规避json转换异常问题
-    sql_content = re.sub('"(\w.+)"', "'\\1'", sql_content)
 
     workflow_id = sql_submit(db_names, request, db_regex, instance, sql_content, workflow_title, group_id,
                              group_name, cc_users, run_date_start, run_date_end)
