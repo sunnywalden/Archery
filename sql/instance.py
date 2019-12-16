@@ -1,5 +1,7 @@
 # -*- coding: UTF-8 -*-
+import asyncio
 import os
+import re
 import time
 
 import simplejson as json
@@ -10,9 +12,13 @@ from django.views.decorators.cache import cache_page
 
 from common.config import SysConfig
 from common.utils.extend_json_encoder import ExtendJSONEncoder
+from common.utils.get_logger import get_logger
 from sql.engines import get_engine
 from sql.plugins.schemasync import SchemaSync
+from sql.utils.async_tasks import async_tasks
 from .models import Instance, ParamTemplate, ParamHistory
+
+logger = get_logger()
 
 
 @permission_required('sql.menu_instance_list', raise_exception=True)
@@ -251,36 +257,25 @@ def schemasync(request):
     return HttpResponse(json.dumps(result), content_type='application/json')
 
 
-@cache_page(60 * 5)
-def instance_resource(request):
-    """
-    获取实例内的资源信息，database、schema、table、column
-    :param request:
-    :return:
-    """
-    instance_id = request.GET.get('instance_id')
-    instance_name = request.GET.get('instance_name')
-    db_name = request.GET.get('db_name')
-    schema_name = request.GET.get('schema_name')
-    tb_name = request.GET.get('tb_name')
+async def sql_order(db_name, instance, schema_name, tb_name, resource_type, db_regex='^.+$'):
+    """提交SQL工单"""
+    logger.debug("Starting!")
+    logger.debug('Debug instance info {0} {1} {2}'.format(resource_type, instance.host, instance.db_type))
 
-    resource_type = request.GET.get('resource_type')
-    if instance_id:
-        instance = Instance.objects.get(id=instance_id)
-    else:
-        try:
-            instance = Instance.objects.get(instance_name=instance_name)
-        except Instance.DoesNotExist:
-            result = {'status': 1, 'msg': '实例不存在', 'data': []}
-            return HttpResponse(json.dumps(result), content_type='application/json')
-    result = {'status': 0, 'msg': 'ok', 'data': []}
+    result = {"data": []}
 
     try:
         query_engine = get_engine(instance=instance)
         if resource_type == 'database':
             resource = query_engine.get_all_databases()
-        elif resource_type == 'schema' and db_name:
+            logger.debug('Debug all databases in instance {}'.format(resource.rows))
+            # 正则筛选数据库
+            regex_str = re.compile(db_regex)
+            resource.rows = tuple(filter(lambda database: re.match(regex_str, database), resource.rows))
+            logger.debug("Debug all databases fit regex {}".format(resource.rows))
+        elif resource_type == 'schema':
             resource = query_engine.get_all_schemas(db_name=db_name)
+
         elif resource_type == 'table' and db_name:
             if schema_name:
                 resource = query_engine.get_all_tables(db_name=db_name, schema_name=schema_name)
@@ -294,15 +289,63 @@ def instance_resource(request):
         else:
             raise TypeError('不支持的资源类型或者参数不完整！')
     except Exception as msg:
+        logger.error("Error {0}".format(msg))
         result['status'] = 1
         result['msg'] = str(msg)
     else:
         if resource.error:
             result['status'] = 1
             result['msg'] = resource.error
+            logger.error('Error catched in sql order for {0}: {1}'.format(db_name, result['data']))
         else:
             result['data'] = resource.rows
-    return HttpResponse(json.dumps(result), content_type='application/json')
+
+    # 结果写入全局变量
+    global all_result
+    all_result["data"] = result['data']
+
+
+@cache_page(60 * 5)
+def instance_resource(request):
+    """
+    获取实例内的资源信息，database、schema、table、column
+    :param request:
+    :return:
+    """
+    instance_id = request.GET.get('instance_id', default='')
+    instance_name = request.GET.get('instance_name', default='')
+    db_regex = request.GET.get('db_regex', default='^.+$')
+    db_names = request.GET.get('db_names', default='')
+    schema_name = request.GET.get('schema_name', default='')
+    tb_name = request.GET.get('tb_name', default='')
+    resource_type = request.GET.get('resource_type', default='database')
+
+    # 逗号分隔的多租户字符串转换为列表
+    db_names = db_names.split(',') if db_names else []
+
+    logger.debug("Debug instance name {0}".format(instance_name))
+    if instance_id:
+        instance = Instance.objects.get(id=instance_id)
+    else:
+        try:
+            instance = Instance.objects.get(instance_name=instance_name)
+        except Instance.DoesNotExist:
+            result = {'status': 1, 'msg': '实例不存在', 'data': []}
+            return HttpResponse(json.dumps(result), content_type='application/json')
+
+    global all_result
+    all_result = {'status': 0, 'msg': 'ok', 'data': []}
+
+    # 多线程提交工单
+    if db_names:
+        # 异步执行
+        asyncio.run(async_tasks(sql_order, db_names, instance, schema_name, tb_name, resource_type))
+    else:
+        logger.debug(resource_type)
+        asyncio.run(sql_order('', instance, schema_name, tb_name, resource_type, db_regex))
+
+    logger.debug('Debug result in instance resource {}'.format(all_result))
+    return HttpResponse(json.dumps(all_result), content_type='application/json')
 
 
 def describe(request):

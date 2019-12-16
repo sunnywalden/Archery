@@ -1,33 +1,30 @@
 # -*- coding: UTF-8 -*-
 import os
-import traceback
 
 import simplejson as json
 from django.conf import settings
-
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.models import Group
-from django.shortcuts import render, get_object_or_404
 from django.http import HttpResponseRedirect, FileResponse
+from django.shortcuts import render, get_object_or_404
 from django.urls import reverse
+from simplejson.errors import JSONDecodeError
 
 from archery import settings
 from common.config import SysConfig
-from sql.engines import get_engine
+from common.utils.const import Const, WorkflowDict
+from common.utils.get_logger import get_logger
 from common.utils.permission import superuser_required
-from sql.engines.models import ReviewResult, ReviewSet
+from sql.engines import get_engine
+from sql.engines.models import ReviewSet
+from sql.utils.resource_group import user_groups
+from sql.utils.sql_review import can_execute, can_timingtask, can_cancel
 from sql.utils.tasks import task_info
-
+from sql.utils.workflow_audit import Audit
 from .models import Users, SqlWorkflow, QueryPrivileges, ResourceGroup, \
     QueryPrivilegesApply, Config, SQL_WORKFLOW_CHOICES, InstanceTag, Instance, QueryLog
-from sql.utils.workflow_audit import Audit
-from sql.utils.sql_review import can_execute, can_timingtask, can_cancel
-from common.utils.const import Const, WorkflowDict
-from sql.utils.resource_group import user_groups
 
-import logging
-
-logger = logging.getLogger('default')
+logger = get_logger()
 
 
 def index(request):
@@ -104,6 +101,9 @@ def detail(request, workflow_id):
         rows = workflow_detail.sqlworkflowcontent.execute_result
     else:
         rows = workflow_detail.sqlworkflowcontent.review_content
+
+    logger.debug('Debug rows {}'.format(rows))
+
     # 自动审批不通过的不需要获取下列信息
     if workflow_detail.status != 'workflow_autoreviewwrong':
         # 获取当前审批和审批流程
@@ -152,30 +152,18 @@ def detail(request, workflow_id):
     review_result = ReviewSet()
     if rows:
         try:
-            # 检验rows能不能正常解析
             loaded_rows = json.loads(rows)
-            #  兼容旧数据'[[]]'格式，转换为新格式[{}]
-            if isinstance(loaded_rows[-1], list):
-                for r in loaded_rows:
-                    review_result.rows += [ReviewResult(inception_result=r)]
-                rows = review_result.json()
-        except IndexError:
-            review_result.rows += [ReviewResult(
-                id=1,
-                sql=workflow_detail.sqlworkflowcontent.sql_content,
-                errormessage="Json decode failed."
-                             "执行结果Json解析失败, 请联系管理员"
-            )]
-            rows = review_result.json()
-        except json.decoder.JSONDecodeError:
-            review_result.rows += [ReviewResult(
-                id=1,
-                sql=workflow_detail.sqlworkflowcontent.sql_content,
-                # 迫于无法单元测试这里加上英文报错信息
-                errormessage="Json decode failed."
-                             "执行结果Json解析失败, 请联系管理员"
-            )]
-            rows = review_result.json()
+        except JSONDecodeError:
+            logger.error("Json decode error {}".format(rows))
+            rows = []
+        else:
+            try:
+                for k, v in loaded_rows.items():
+                    for record in v:
+                        review_result.rows.extend([{**record, "db_name": k}])
+                rows = review_result.rows
+            except Exception as e:
+                rows = []
     else:
         rows = workflow_detail.sqlworkflowcontent.review_content
 
@@ -195,13 +183,17 @@ def rollback(request):
         return render(request, 'error.html', context)
     workflow = SqlWorkflow.objects.get(id=int(workflow_id))
 
+    query_engine = get_engine(instance=workflow.instance)
     try:
-        query_engine = get_engine(instance=workflow.instance)
         list_backup_sql = query_engine.get_rollback(workflow=workflow)
     except Exception as msg:
-        logger.error(traceback.format_exc())
+        logger.error(msg)
         context = {'errMsg': msg}
         return render(request, 'error.html', context)
+
+    workflow_detail = SqlWorkflow.objects.get(id=workflow_id)
+    db_regex = workflow_detail.db_regex
+    db_names = workflow_detail.db_names
 
     # 获取数据，存入目录
     path = os.path.join(settings.BASE_DIR, 'downloads/rollback')
@@ -222,7 +214,10 @@ def rollback(request):
         os.remove(file_name)
         rollback_workflow_name = f"【回滚工单】原工单Id:{workflow_id} ,{workflow.workflow_name}"
         context = {'list_backup_sql': list_backup_sql, 'workflow_detail': workflow,
-                   'rollback_workflow_name': rollback_workflow_name}
+                   'rollback_workflow_name': rollback_workflow_name,
+                   'db_regex': db_regex,
+                   'db_names': db_names.split(',')
+                   }
         return render(request, 'rollback.html', context)
 
 

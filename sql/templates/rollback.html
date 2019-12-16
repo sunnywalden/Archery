@@ -108,18 +108,40 @@
                         $(this).button('reset');
                         $(this).dequeue();
                     });
+                    var allRollBackSql = $("#editSqlContent").val();
                     var editWorkflowNname = "{{ rollback_workflow_name }}";
-                    var editSqlContent = $("#editSqlContent").val();
+                    if ( allRollBackSql.indexOf('\n') != -1 ) {
+                        var SqlContent_list = allRollBackSql.split('\n');
+                        var SqlContent = SqlContent_list.filter(
+                            function (s) {
+                                return s && s.trim();
+                            }
+                        );
+                        var editSqlContent = SqlContent.join('\n');
+                        {#var SqlContentWithoutDb = SqlContent.map(function (sql) {#}
+                        {#    return sql.replace(/`\w+`./, '')#}
+                        {#\});#}
+                        {#var editSqlContentAll = new Set(SqlContentWithoutDb);#}
+                        {#var editSqlContent = Array.from(editSqlContentAll);#}
+                    }
+                    else {
+                        var editSqlContent = allRollBackSql;
+                    };
                     var editGroup = "{{ workflow_detail.group_name }}";
                     var editClustername = "{{ workflow_detail.instance.instance_name }}";
-                    var editDbname = "{{ workflow_detail.db_name }}";
+                    var editDbname = "{{ workflow_detail.db_names }}";
+                    var editRegex = "{{ workflow_detail.db_regex }}";
                     var editIsbackup = "{{ workflow_detail.is_backup }}";
+                    var db = editDbname.split(',')[0];
+                    console.log(db);
                     sessionStorage.removeItem('editWorkflowDetailId');
                     sessionStorage.setItem('editWorkflowNname', editWorkflowNname);
                     sessionStorage.setItem('editSqlContent', editSqlContent);
                     sessionStorage.setItem('editGroup', editGroup);
                     sessionStorage.setItem('editClustername', editClustername);
                     sessionStorage.setItem('editDbname', editDbname);
+                    sessionStorage.setItem('editDb', db);
+                    sessionStorage.setItem('editRegex', editRegex);
                     sessionStorage.setItem('editIsbackup', editIsbackup);
                 });
             }

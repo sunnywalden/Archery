@@ -1,4 +1,5 @@
-FROM hhyo/archery-base:1.0
+#FROM hhyo/archery-base:1.0
+FROM sunnywalden/archery-base:v1.0
 
 WORKDIR /opt/archery
 
@@ -8,6 +9,7 @@ COPY . /opt/archery/
 RUN cd /opt \
     && yum -y install nginx \
     && source /opt/venv4archery/bin/activate \
+    && cd /opt/archery \
     && pip3 install -r /opt/archery/requirements.txt \
     && cp /opt/archery/src/docker/nginx.conf /etc/nginx/ \
     && mv /opt/sqladvisor /opt/archery/src/plugins/ \

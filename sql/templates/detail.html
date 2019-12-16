@@ -70,7 +70,7 @@
                 {{ workflow_detail.instance.instance_name }}
             </td>
             <td>
-                {{ workflow_detail.db_name }}
+                {{ workflow_detail.db_names }}
             </td>
             <td>
                 {{ workflow_detail.create_time }}
@@ -126,7 +126,8 @@
         <!-- 工单详情-->
         <div id="detail" role="tabpanel" class="tab-pane fade in active table-responsive">
             <table id="tb-detail" data-toggle="table" class="table table-condensed"
-                   style="table-layout:inherit;word-break:break-word;overflow:hidden;text-overflow:ellipsis;"></table>
+                   style="table-layout:inherit;word-break:break-word;overflow:hidden;text-overflow:ellipsis;">
+            </table>
             <!--最后操作信息-->
             {% if last_operation_info %}
                 <table data-toggle="table" class="table table-striped table-hover"
@@ -221,7 +222,7 @@
     {% endif %}
     <!--查看回滚按钮-->
     {% if workflow_detail.is_backup %}
-        {% if  workflow_detail.status == 'workflow_finish' or  workflow_detail.status == 'workflow_exception' %}
+        {% if  workflow_detail.status == 'workflow_finish' or  workflow_detail.status == 'workflow_exception' and not workflow_detail.is_manual %}
             <form action="/rollback/" method="get" style="display:inline-block;">
                 {% csrf_token %}
                 <input type="hidden" name="workflow_id" value="{{ workflow_detail.id }}">
@@ -399,15 +400,17 @@
     <!--按钮控制 -->
     <script>
         var editWorkflowNname = "{{ workflow_detail.workflow_name }}";
+        var editWorkflowDbs = "{{ workflow_detail.db_names }}";
         var editDemandUrl = "{{ workflow_detail.demand_url }}";
         var editSqlContent = $("#editSqlContent").val();
         var editGroup = "{{ workflow_detail.group_name }}";
         var editClustername = "{{ workflow_detail.instance.instance_name }}";
-        var editDbname = "{{ workflow_detail.db_name }}";
+        var editDbname = "{{ workflow_detail.db_names }}";
         var editIsbackup = "{{ workflow_detail.is_backup }}";
 
         $("#btnEditSql").click(function () {
             sessionStorage.setItem('editWorkflowNname', editWorkflowNname);
+            sessionStorage.setItem('editWorkflowDbs', editWorkflowDbs);
             sessionStorage.setItem('editDemandUrl', editDemandUrl);
             sessionStorage.setItem('editSqlContent', editSqlContent);
             sessionStorage.setItem('editGroup', editGroup);
@@ -418,6 +421,7 @@
         $("#btnViewSql").click(function () {
             sessionStorage.removeItem('editWorkflowDetailId');
             sessionStorage.setItem('editWorkflowNname', editWorkflowNname);
+            sessionStorage.setItem('editWorkflowDbs', editWorkflowDbs);
             sessionStorage.setItem('editDemandUrl', editDemandUrl);
             sessionStorage.setItem('editSqlContent', editSqlContent);
             sessionStorage.setItem('editGroup', editGroup);
@@ -427,6 +431,7 @@
         });
         $("#btnSubmitOtherCluster").click(function () {
             sessionStorage.setItem('editWorkflowNname', editWorkflowNname);
+            sessionStorage.setItem('editWorkflowDbs', editWorkflowDbs);
             sessionStorage.setItem('editDemandUrl', editDemandUrl);
             sessionStorage.setItem('editSqlContent', editSqlContent);
             sessionStorage.setItem('editGroup', editGroup);
@@ -534,16 +539,20 @@
                 //格式化详情
                 detailFormatter: function (index, row) {
                     var html = [];
+                    console.log('Debug' + row);
                     $.each(row, function (key, value) {
-                        if (key === 'sql') {
-                            var sql = value;
-                            //替换所有的换行符
-                            sql = sql.replace(/\r\n/g, "<br>");
-                            sql = sql.replace(/\n/g, "<br>");
-                            //替换所有的空格
-                            sql = sql.replace(/\s/g, "&nbsp;");
-                            html.push('<span>' + sql + '</span>');
-                        }
+                            if (key === 'sql') {
+                                var sql = value;
+                                //替换所有的换行符
+                                sql = sql.replace(/\r\n/g, "<br>");
+                                sql = sql.replace(/\n/g, "<br>");
+                                //替换所有的空格
+                                sql = sql.replace(/\s/g, "&nbsp;");
+                                html.push('<span>' + sql + '</span>');
+                            }
+                            if (key === 'db_name') {
+                                console.log(value);
+                            }
                     });
                     return html.join('');
                 },
@@ -553,7 +562,15 @@
                     title: 'ID',
                     field: 'id',
                     sortable: true
-                }, {
+                },{
+                    title: '数据库',
+                    field: 'db_name',
+                    formatter: function (value, row, index) {
+                        return value
+                    },
+                    sortable: true
+                },
+                    {
                     title: 'SQL内容',
                     field: 'sql',
                     formatter: function (value, row, index) {

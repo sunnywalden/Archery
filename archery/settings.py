@@ -123,7 +123,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'archery',
         'USER': 'root',
-        'PASSWORD': '',
+        'PASSWORD': '123456',
         'HOST': '127.0.0.1',
         'PORT': '3306',
         'OPTIONS': {
@@ -159,7 +159,7 @@ CACHES = {
         "LOCATION": "redis://127.0.0.1:6379/0",
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
-            "PASSWORD": ""
+            "PASSWORD": "123456"
         }
     },
     "dingding": {
@@ -167,7 +167,7 @@ CACHES = {
         "LOCATION": "redis://127.0.0.1:6379/1",
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
-            "PASSWORD": ""
+            "PASSWORD": "123456"
         }
     }
 }
@@ -211,7 +211,7 @@ LOGGING = {
         'default': {
             'level': 'DEBUG',
             'class': 'logging.handlers.RotatingFileHandler',
-            'filename': 'downloads/log/archery.log',
+            'filename': 'logs/archery.log',
             'maxBytes': 1024 * 1024 * 100,  # 5 MB
             'backupCount': 5,
             'formatter': 'verbose',

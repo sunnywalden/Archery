@@ -1,16 +1,23 @@
 # -*- coding: UTF-8 -*-
 
+import json
+
 from common.utils.const import WorkflowDict
+from common.utils.get_logger import get_logger
+from sql.engines import get_engine
 from sql.engines.models import ReviewResult, ReviewSet
 from sql.models import SqlWorkflow
 from sql.notify import notify_for_execute
 from sql.utils.workflow_audit import Audit
-from sql.engines import get_engine
+
+logger = get_logger()
 
 
 def execute(workflow_id):
     """为延时或异步任务准备的execute, 传入工单ID即可"""
+    logger.debug("Entering execute func!")
     workflow_detail = SqlWorkflow.objects.get(id=workflow_id)
+
     # 给定时执行的工单增加执行日志
     if workflow_detail.status == 'workflow_timingtask':
         # 将工单状态修改为执行中
@@ -24,6 +31,7 @@ def execute(workflow_id):
                       operator='',
                       operator_display='系统'
                       )
+
     execute_engine = get_engine(instance=workflow_detail.instance)
     return execute_engine.execute_workflow(workflow=workflow_detail)
 
@@ -37,6 +45,26 @@ def execute_callback(task):
     workflow = SqlWorkflow.objects.get(id=workflow_id)
     workflow.finish_time = task.stopped
 
+    logger.info("Debug task result in callback {0}".format(task.result))
+
+    task_res = task.result
+    execute_result = []
+    result_error = []
+
+    error_level = 0
+    for database, exe_results in task_res.items():
+        logger.debug("Debug SQL execute task result for database {0}".format(database))
+        logger.debug("Debug result {0}, {1}".format(type(exe_results), exe_results))
+        for exe_result in exe_results:
+            res_error = exe_result["errormessage"]
+            err_level = int(exe_result["errlevel"])
+            if err_level > error_level: error_level = err_level
+            if res_error:
+                logger.error("Execute sql error:{0}".format(res_error))
+                result_error.append(res_error)
+
+        execute_result.extend(exe_results)
+
     if not task.success:
         # 不成功会返回错误堆栈信息，构造一个错误信息
         workflow.status = 'workflow_exception'
@@ -47,14 +75,15 @@ def execute_callback(task):
             stagestatus='异常终止',
             errormessage=task.result,
             sql=workflow.sqlworkflowcontent.sql_content)]
-    elif task.result.warning or task.result.error:
+    elif result_error and error_level == 2:
         execute_result = task.result
         workflow.status = 'workflow_exception'
     else:
-        execute_result = task.result
         workflow.status = 'workflow_finish'
     # 保存执行结果
-    workflow.sqlworkflowcontent.execute_result = execute_result.json()
+    logger.info("Final execute result save to mysql {0}".format(execute_result))
+    execute_result = json.dumps(execute_result)
+    workflow.sqlworkflowcontent.execute_result = execute_result
     workflow.sqlworkflowcontent.save()
     workflow.save()
 

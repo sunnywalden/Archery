@@ -56,9 +56,12 @@ RUN yum -y install libffi-devel wget gcc make zlib-devel openssl openssl-devel n
     && virtualenv venv4schemasync  --python=python2 \
     && source venv4schemasync/bin/activate \
     && yum install -y python-devel \
-    && pip install schema-sync mysql-python
+    && pip install schema-sync mysql-python \
 #soar
-RUN cd /opt \
+    && cd /opt \
+    && pip install schema-sync mysql-python \
+#soar
+    && cd /opt \
     && wget https://github.com/XiaoMi/soar/releases/download/$SOAR_VERSION/soar.linux-amd64 -O soar \
     && chmod a+x soar \
 #binlog2sql
@@ -73,4 +76,3 @@ RUN cd /opt \
     && yum -y install unixODBC-devel \
 #oracle instantclient
     && yum -y install http://yum.oracle.com/repo/OracleLinux/OL7/oracle/instantclient/x86_64/getPackage/oracle-instantclient19.3-basiclite-19.3.0.0.0-1.x86_64.rpm
-

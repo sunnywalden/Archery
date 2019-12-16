@@ -1,33 +1,80 @@
 # -*- coding: UTF-8 -*-
+import asyncio
 import logging
 import re
 import traceback
+
 import MySQLdb
 import simplejson as json
 import sqlparse
 
 from common.config import SysConfig
+from common.utils.get_logger import get_logger
+from sql.utils.async_tasks import async_tasks
+from sql.utils.sql_conn import setup_conn, shutdown_conn
 from sql.utils.sql_utils import get_syntax_type
 from . import EngineBase
 from .models import ResultSet, ReviewSet, ReviewResult
 
-logger = logging.getLogger('default')
+
+def get_rollback_sql(cur, row):
+    """Getting rollback sql"""
+    # 获取backup_db_name， 兼容旧数据'[[]]'格式
+    if not row: return None
+    if isinstance(row, list):
+        if len(row) < 9: return None
+        if row[8] == 'None':
+            return None
+        backup_db_name = row[8]
+        sequence = row[7]
+        sql = row[5]
+    # 新数据
+    else:
+        if row.get('backup_dbname') in ('None', ''):
+            return  None
+        backup_db_name = row.get('backup_dbname')
+        sequence = row.get('sequence')
+        sql = row.get('sql')
+    # 获取备份表名
+    opid_time = sequence.replace("'", "")
+    sql_table = f"""select tablename 
+                                    from {backup_db_name}.$_$Inception_backup_information$_$ 
+                                    where opid_time='{opid_time}';"""
+
+    cur.execute(sql_table)
+    list_tables = cur.fetchall()
+    if list_tables:
+        # 获取备份语句
+        table_name = list_tables[0][0]
+        sql_back = f"""select rollback_statement 
+                                       from {backup_db_name}.{table_name} 
+                                       where opid_time='{opid_time}'"""
+        cur.execute(sql_back)
+        list_backup = cur.fetchall()
+        # 拼接成回滚语句列表,['源语句'，'回滚语句']
+        return [sql, '\n'.join([back_info[0] for back_info in list_backup])]
 
 
 class InceptionEngine(EngineBase):
+    def __init__(self, instance=None):
+        super().__init__(instance=instance)
+        self.logger = get_logger()
+
     def get_connection(self, db_name=None):
-        if self.conn:
-            return self.conn
+        if self.pool:
+            return self.pool
         if hasattr(self, 'instance'):
-            self.conn = MySQLdb.connect(host=self.host, port=self.port, charset=self.instance.charset or 'utf8mb4',
-                                        connect_timeout=10)
-            return self.conn
-        archer_config = SysConfig()
-        inception_host = archer_config.get('inception_host')
-        inception_port = int(archer_config.get('inception_port', 6669))
-        self.conn = MySQLdb.connect(host=inception_host, port=inception_port, charset='utf8mb4',
-                                    connect_timeout=10)
-        return self.conn
+            self.pool = setup_conn(self.host, self.port, user=self.user, password=self.password, database=db_name, charset=self.instance.charset or 'utf8mb4')
+        else:
+            archer_config = SysConfig()
+            inception_host = archer_config.get('inception_host')
+            inception_port = int(archer_config.get('inception_port', 6669))
+            self.pool = setup_conn(inception_host, inception_port)
+        return self.pool
+
+    def close(self, pool=None):
+        if self.pool:
+            self.pool.close()
 
     @staticmethod
     def get_backup_connection():
@@ -44,7 +91,7 @@ class InceptionEngine(EngineBase):
                                autocommit=True
                                )
 
-    def execute_check(self, instance=None, db_name=None, sql=''):
+    def execute_check(self, db_name=None, instance=None,  sql=''):
         """inception check"""
         check_result = ReviewSet(full_sql=sql)
         # 检查 inception 不支持的函数
@@ -97,7 +144,23 @@ class InceptionEngine(EngineBase):
     def execute(self, workflow=None):
         """执行上线单"""
         instance = workflow.instance
-        execute_result = ReviewSet(full_sql=workflow.sqlworkflowcontent.sql_content)
+        db_names = workflow.db_names.split(',') if workflow.db_names else []
+
+        # 全局变量保存执行结果
+        global execute_res
+        execute_res = {}
+
+        # 异步执行
+        asyncio.run(async_tasks(self.execute_sql, db_names, instance, workflow))
+
+        return json.loads(json.dumps(execute_res))
+
+    async def execute_sql(self, db_name, instance, workflow):
+        sql = workflow.sqlworkflowcontent.sql_content.replace('"', '\"')
+        # sql = sql.replace("'", "\'")
+        sql = sql.replace('\n', ' ')
+        execute_result = ReviewSet(full_sql=sql)
+        global execute_res
         if workflow.is_backup:
             str_backup = "--enable-remote-backup"
         else:
@@ -109,7 +172,7 @@ class InceptionEngine(EngineBase):
                          use `{workflow.db_name}`;
                          {workflow.sqlworkflowcontent.sql_content}
                          inception_magic_commit;"""
-        split_result = self.query(sql=sql_split)
+        split_result = self.query(db_name=db_name, sql=sql_split)
 
         # 对于split好的结果，再次交给inception执行，保持长连接里执行.
         for splitRow in split_result.rows:
@@ -130,7 +193,6 @@ class InceptionEngine(EngineBase):
                     stagestatus='异常终止',
                     errormessage=f'Inception Error: {one_line_execute_result.error}',
                     sql=sql_tmp)]
-                return execute_result
 
             # 把结果转换为ReviewSet
             for r in one_line_execute_result.rows:
@@ -141,14 +203,17 @@ class InceptionEngine(EngineBase):
             if r.errlevel in (1, 2) and not re.search(r"Execute Successfully", r.stagestatus):
                 execute_result.error = "Line {0} has error/warning: {1}".format(r.id, r.errormessage)
                 break
-        return execute_result
+        # 执行结果写入全局变量
+        execute_res[db_name] = execute_result
 
     def query(self, db_name=None, sql='', limit_num=0, close_conn=True):
         """返回 ResultSet """
         result_set = ResultSet(full_sql=sql)
-        conn = self.get_connection()
+        # 从线程池获取连接
+        pool = self.get_connection(db_name=db_name)
+        conn = pool.connection()
+        cursor = conn.cursor()
         try:
-            cursor = conn.cursor()
             effect_row = cursor.execute(sql)
             if int(limit_num) > 0:
                 rows = cursor.fetchmany(size=int(limit_num))
@@ -160,10 +225,13 @@ class InceptionEngine(EngineBase):
             result_set.rows = rows
             result_set.affected_rows = effect_row
         except Exception as e:
-            logger.warning(f"Inception语句执行报错，语句：{sql}，错误信息{traceback.format_exc()}")
+            self.logger.info(f"Inception语句执行报错，语句：{sql}，错误信息{traceback.format_exc()}")
             result_set.error = str(e)
+        cursor.close()
+        conn.close()
         if close_conn:
-            self.close()
+            # 关闭改租户连接
+            shutdown_conn(pool=self.pool)
         return result_set
 
     def query_print(self, instance, db_name=None, sql=''):
@@ -176,7 +244,10 @@ class InceptionEngine(EngineBase):
                           use `{db_name}`;
                           {sql}
                           inception_magic_commit;"""
-        print_info = self.query(db_name=db_name, sql=sql).to_dict()[0]
+        try:
+            print_info = self.query(db_name=db_name, sql=sql).to_dict()[0]
+        except IndexError:
+            print_info = {'errlevel': 1, 'errmsg': '查询异常'}
         # 兼容语法错误时errlevel=0的场景
         if print_info['errlevel'] == 0 and print_info['errmsg'] == 'None':
             return json.loads(_repair_json_str(print_info['query_tree']))
@@ -189,50 +260,48 @@ class InceptionEngine(EngineBase):
         """
         获取回滚语句，并且按照执行顺序倒序展示，return ['源语句'，'回滚语句']
         """
-        list_execute_result = json.loads(workflow.sqlworkflowcontent.execute_result)
-        # 回滚语句倒序展示
-        list_execute_result.reverse()
+        # 解析json对象
+        if isinstance(workflow.sqlworkflowcontent.execute_result, (str)):
+            execute_result = workflow.sqlworkflowcontent.execute_result
+            try:
+                list_execute_result = json.loads(execute_result.encode('utf-8'))
+            except Exception as e:
+                logging.error("Transation execute result to python object failed {0}".format(e))
+                try:
+                    list_execute_result = eval(execute_result.encode('utf-8'))
+                except Exception as e1:
+                    list_execute_result = []
+
+        else:
+            list_execute_result = workflow.sqlworkflowcontent.execute_result
+
+        self.logger.debug("Debug execute result {0}".format(list_execute_result))
+
+        # 无执行结果
+        if not list_execute_result: return []
         list_backup_sql = []
         # 创建连接
         conn = self.get_backup_connection()
-        cur = conn.cursor()
-        for row in list_execute_result:
-            try:
-                # 获取backup_db_name， 兼容旧数据'[[]]'格式
-                if isinstance(row, list):
-                    if row[8] == 'None':
-                        continue
-                    backup_db_name = row[8]
-                    sequence = row[7]
-                    sql = row[5]
-                # 新数据
-                else:
-                    if row.get('backup_dbname') in ('None', ''):
-                        continue
-                    backup_db_name = row.get('backup_dbname')
-                    sequence = row.get('sequence')
-                    sql = row.get('sql')
-                # 获取备份表名
-                opid_time = sequence.replace("'", "")
-                sql_table = f"""select tablename 
-                                from {backup_db_name}.$_$Inception_backup_information$_$ 
-                                where opid_time='{opid_time}';"""
+        cursor = conn.cursor()
 
-                cur.execute(sql_table)
-                list_tables = cur.fetchall()
-                if list_tables:
-                    # 获取备份语句
-                    table_name = list_tables[0][0]
-                    sql_back = f"""select rollback_statement 
-                                   from {backup_db_name}.{table_name} 
-                                   where opid_time='{opid_time}'"""
-                    cur.execute(sql_back)
-                    list_backup = cur.fetchall()
-                    # 拼接成回滚语句列表,['源语句'，'回滚语句']
-                    list_backup_sql.append([sql, '\n'.join([back_info[0] for back_info in list_backup])])
+        rows = []
+
+        # 工单已执行完成
+        if isinstance(list_execute_result, (dict)):
+            rows = list_execute_result.values()
+        # 工单未正常执行
+        if isinstance(list_execute_result, (tuple, list)):
+            rows = list_execute_result
+
+        for row in rows:
+            try:
+                backup_sql = get_rollback_sql(cursor, row)
             except Exception as e:
-                logger.error(f"获取回滚语句报错，异常信息{traceback.format_exc()}")
-                raise Exception(e)
+                self.logger.error(f"获取回滚语句报错，异常信息{traceback.format_exc()}")
+                return []
+            else:
+                # 回滚语句写入列表
+                if backup_sql: list_backup_sql.append(backup_sql)
         # 关闭连接
         if conn:
             conn.close()
@@ -262,11 +331,6 @@ class InceptionEngine(EngineBase):
         else:
             raise ValueError('pt-osc不支持暂停和恢复，需要停止执行请使用终止按钮！')
         return self.query(sql=sql)
-
-    def close(self):
-        if self.conn:
-            self.conn.close()
-            self.conn = None
 
 
 def _repair_json_str(json_str):
