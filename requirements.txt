@@ -23,3 +23,5 @@ supervisor
 phoenixdb==0.7
 django-mirage-field==0.0.3
 DBUtils
+
+urllib3>=1.25.9 # not directly required, pinned by Snyk to avoid a vulnerability
